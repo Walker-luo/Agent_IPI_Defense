@@ -1,13 +1,15 @@
 # BaseIntent 文档
 
+`docs/` 根目录仅保留完整评测、小批量评测和注入目标筛选三份运行指南；框架、配置、结果与维护说明集中在本目录。
+
 | 指南 | 内容 |
 | --- | --- |
 | [框架](framework.md) | L1/L2/L3、宿主进度、Monitor、公式与边界 |
 | [模型与工具配置](model_tool_configuration.md) | 两个环境、凭证、配置优先级、工具元数据与默认值 |
 | [评测入口](evaluation.md) | 离线检查、在线评测及证据口径 |
-| [完整评测与公共参数](benchmark.md) | Full、baseline、clean、攻击、cohort、续跑 |
-| [小批量评测](partial_benchmark.md) | 注册前缀范围与低成本对照 |
-| [目标筛选](injection_precheck.md) | 单次 GOAL 预检、冻结名单与中断恢复 |
+| [完整评测与公共参数](../benchmark.md) | Full、baseline、clean、攻击、cohort、续跑 |
+| [小批量评测](../partial_benchmark.md) | 注册前缀范围与低成本对照 |
+| [目标筛选](../injection_precheck.md) | 单次 GOAL 预检、冻结名单与中断恢复 |
 | [结果文件](result_files.md) | 原生评分、诊断附件、成本与失败索引 |
 | [Dashboard](dashboard.md) | 启动、实际配置、历史比较与导出 |
 | [迁移](migration.md) | BaseIntent 命名、环境兼容与历史读取 |

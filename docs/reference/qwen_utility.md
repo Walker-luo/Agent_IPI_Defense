@@ -1,6 +1,6 @@
 # Qwen 效用与成本入口
 
-当前运行和 baseline 共用[模型配置](model_tool_configuration.md)、请求角色适配与[评测入口](benchmark.md)。主模型/L2/progress 与 L3 的实际调用、usage 和服务错误分别保留，不修改 provider、模型、评分或选择来获得通过。
+当前运行和 baseline 共用[模型配置](model_tool_configuration.md)、请求角色适配与[评测入口](../benchmark.md)。主模型/L2/progress 与 L3 的实际调用、usage 和服务错误分别保留，不修改 provider、模型、评分或选择来获得通过。
 
 最近固定键版本的 12 个有效案例（8 攻击、4 clean，0 错误）观察到：TSR 8/12→7/12、原生 ASR 0/8→0/8、progress 61→43，计分 Token 551,741→470,265（−14.8%）。成本下降同时有一例净效用损失，工程实现完成、质量验收 partial；没有一般效用/安全通过结论，直接邀请自动完成路径也未在这 12 例触发。
 

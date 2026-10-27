@@ -20,7 +20,7 @@
 | Measurement and screening | `experiments/run_benchmark.py`, `experiments/run_partial_benchmark.py`, `experiments/run_injection_precheck.py`, `experiments/common/` |
 | Platform and tests | `dashboard/`, `tests/` |
 
-Current usage starts at `README.md` and `docs/README.md`. `docs/framework.md` describes the implemented framework, `docs/migration.md` the naming boundaries, and `docs/maintenance.md` the engineering verification. Do not use historical analysis as current defaults.
+Current usage starts at `README.md` and `docs/reference/README.md`. `docs/reference/framework.md` describes the implemented framework, `docs/reference/migration.md` the naming boundaries, and `docs/reference/maintenance.md` the engineering verification. Do not use historical analysis as current defaults.
 
 ## Defense contracts
 
@@ -52,7 +52,7 @@ Current usage starts at `README.md` and `docs/README.md`. `docs/framework.md` de
 - Tool metadata follows explicit/env/backend-local/recognized-generic/builtin priority. Unknown/incompatible catalogues fail before calls. Never fabricate schemas, placeholder arguments or risk classifications. Unsupported AgentDyn tool_knowledge goals remain excluded from efficacy denominators.
 - Full selects all registered tasks; partial keeps registration-prefix 3 users x 3 targets and cohort filters never backfill. Screening gives each injection GOAL one trajectory; failure excludes, errors/interruption skip separately, resume starts only unstarted goals. Do not retry completed screening or rewrite frozen decisions.
 - Measurements keep native attack order and existing separate attack processes. Do not introduce concurrency flags or retries. Full benchmark execution requires an explicit request.
-- Real Qwen evaluation is the default for behavior changes under the user's standing authorization; use existing model/provider and shared runners. At least 9 distinct completed scored cases, appropriate clean/attack controls, and proportionate expansion for substantial changes. Respect any current explicit cap/offline restriction; closed campaigns remain closed.
+- Online testing may use only `qwen3.7flash`; DeepSeek is prohibited. Real `qwen3.7flash` evaluation is the default for behavior changes under the user's standing authorization; use the existing provider and shared runners. At least 9 distinct completed scored cases, appropriate clean/attack controls, and proportionate expansion for substantial changes. Respect any current explicit cap/offline restriction; closed campaigns remain closed.
 - Mocks/authored replies are deterministic engineering checks only. Report actual attempted/completed/valid/error/incomplete counts, exact case IDs, calls and known/unknown usage. Never replace unavailable real calls with mocks or infer general efficacy from small samples.
 - Offline full commands: `conda run -n ipi python -B -m unittest discover -s tests -v`, same in `ipi-agentdyn`, plus `node --test tests/*.cjs`. Preserve known pre-existing failures and explicit backend skips; no full-green claim without evidence.
 

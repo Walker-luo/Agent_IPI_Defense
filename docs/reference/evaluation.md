@@ -4,9 +4,9 @@
 
 | 任务 | 入口 |
 | --- | --- |
-| 所选场景全部注册任务、baseline、clean、cohort | [完整评测](benchmark.md) |
-| 每场景前三用户 × 前三注入目标 | [小批量评测](partial_benchmark.md) |
-| 每个注入 GOAL 单次完整轨迹与冻结名单 | [目标筛选](injection_precheck.md) |
+| 所选场景全部注册任务、baseline、clean、cohort | [完整评测](../benchmark.md) |
+| 每场景前三用户 × 前三注入目标 | [小批量评测](../partial_benchmark.md) |
+| 每个注入 GOAL 单次完整轨迹与冻结名单 | [目标筛选](../injection_precheck.md) |
 | 模型/工具/默认控制 | [配置](model_tool_configuration.md) |
 | 评分、失败索引、成本与原始回复 | [结果](result_files.md) |
 

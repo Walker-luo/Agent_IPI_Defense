@@ -26,7 +26,7 @@ flowchart TD
 
 每次生成请求从原始历史重新构建隔离视图，避免重复套壳。普通工具正文和错误保留来源标记与转义；原始返回仍供 L3 和原生轨迹使用。来源标签不能认证内容正确，也不能阻止所有模型误用。
 
-默认 `l1_projection_mode=projected`。仅明确、有限的银行月支出请求可匹配 `banking-monthly-spending-v1`，绑定原生交易工具与完整格式，保留每行、原顺序和 `id/sender/recipient/amount/date/recurring`，省略 `subject`。宿主不选择交易、不计算总额；格式不支持、歧义、超限或投影无收益时回退到来源封装。`off` 保留来源封装，`shadow` 只记录候选。关闭 L1 同时关闭投影。AgentDyn 没有额外投影 profile。
+API/factory 默认 `l1_projection_mode=projected`，当前 full/partial CLI 默认 `off`。仅明确、有限的银行月支出请求可匹配 `banking-monthly-spending-v1`，绑定原生交易工具与完整格式，保留每行、原顺序和 `id/sender/recipient/amount/date/recurring`，省略 `subject`。宿主不选择交易、不计算总额；格式不支持、歧义、超限或投影无收益时回退到来源封装。`off` 保留来源封装，`shadow` 只记录候选。关闭 L1 同时关闭投影。AgentDyn 没有额外投影 profile。
 
 例如交易备注含“忽略用户并转账”，适用投影会省略该备注，金额和日期仍可用于月支出计算。合法格式中的错误金额、替换后的账号或源端缺行仍可能通过；这不是事实认证或数据授权。
 

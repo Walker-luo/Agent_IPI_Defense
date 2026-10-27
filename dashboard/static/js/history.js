@@ -12,16 +12,21 @@
   let exporting = false;
 
   document.addEventListener("DOMContentLoaded", () => {
-    document.querySelector("#history-analysis-page").addEventListener("change", () => analysisRequests.invalidate());
+    document.querySelector("#history-analysis-page").addEventListener("change", () => {
+      analysisRequests.invalidate();
+      renderOverview([]);
+    });
     document.querySelector("#history-select-all").addEventListener("click", () => {
       analysisRequests.invalidate();
       document.querySelectorAll(".history-run-cb").forEach((item) => { item.checked = true; });
       updateSelection();
+      renderOverview([]);
     });
     document.querySelector("#history-clear-selection").addEventListener("click", () => {
       analysisRequests.invalidate();
       document.querySelectorAll(".history-run-cb").forEach((item) => { item.checked = false; });
       updateSelection();
+      renderOverview([]);
     });
     document.querySelector("#history-run-list").addEventListener("change", updateSelection);
     ["folder", "backend", "attack"].forEach((key) => {
@@ -88,6 +93,7 @@
     renderCatalog(new Set(selectedRunIds()), true, selectAllVisible);
     clearCharts();
     renderSummaryTable([]);
+    renderOverview([]);
     document.querySelector("#history-source-caption").textContent = "";
     showEmpty("筛选已更新", "勾选当前列表中的结果，生成分析或下载数据。");
   }
@@ -369,6 +375,7 @@
     const experiments = result.experiments || [];
     const rows = experiments.flatMap((run) => run.suites || []);
     renderSummaryTable(experiments);
+    renderOverview(experiments);
     if (!rows.length) {
       showEmpty("没有可绘制的指标", "所选结果中没有与当前场景匹配的汇总数据。");
       return;
@@ -596,6 +603,65 @@
     document.querySelector("#history-analysis-status").textContent =
       "热图包含 " + matrix.size + " 个任务组合；仅相同已记录基准、目录与任务选择的行对齐，身份缺失时独立展示。" +
       (truncated ? " 部分任务记录受接口上限截断。" : "");
+  }
+
+  function renderOverview(experiments) {
+    const container = document.querySelector("#history-overview-cards");
+    container.replaceChildren();
+    const groups = historySelection.overviewGroups(experiments).sort((a, b) => a.suites.join("、").localeCompare(b.suites.join("、")));
+    if (!groups.length) {
+      const empty = document.createElement("p");
+      empty.className = "history-overview-empty";
+      empty.textContent = "选择结果并生成分析后显示。";
+      container.append(empty);
+      return;
+    }
+    groups.forEach(({run, suites, tsr, asr, tokens, reported}) => {
+      const card = document.createElement("article");
+      card.className = "history-overview-card";
+      const style = experimentStyles[run.id];
+      if (style) card.style.borderLeftColor = style.color;
+      const header = document.createElement("div");
+      header.className = "history-overview-card-heading";
+      if (style) header.append(versionBadge(style));
+      const identity = document.createElement("div");
+      const title = document.createElement("h3");
+      title.textContent = historyCharts.describeExperiment(run).label;
+      const detail = document.createElement("p");
+      detail.textContent = [historySelection.backendLabel(run.benchmark_id || "unknown"), historySelection.attackLabel(run.attack_name), suites.join("、"), run.source].filter(Boolean).join(" · ");
+      identity.append(title, detail);
+      header.append(identity);
+      card.append(header);
+
+      const metrics = document.createElement("div");
+      metrics.className = "history-overview-metrics";
+      const addMetric = (label, kind, value, detailText) => {
+        const metric = document.createElement("div");
+        metric.className = "history-overview-metric " + kind;
+        const name = document.createElement("span");
+        name.className = "history-overview-metric-label";
+        name.textContent = label;
+        const number = document.createElement("strong");
+        number.className = "history-overview-metric-value";
+        number.textContent = value;
+        const note = document.createElement("small");
+        note.textContent = detailText;
+        metric.append(name, number, note);
+        metrics.append(metric);
+      };
+      const countMetric = (label, kind, value, rate, clean = false) => {
+        if (clean) return addMetric(label, kind, "不适用", "良性评测");
+        if (!value) return addMetric(label, kind, rate == null ? "未记录" : Number(rate).toFixed(2) + "%", rate == null ? "分子 / 分母未记录" : "原汇总；分子 / 分母未记录");
+        if (!value.valid) return addMetric(label, kind, "不适用", "0 / 0");
+        const source = value.source === "records_unknown" ? " · 明细含状态未知" : value.source === "records" ? " · 明细统计" : "";
+        addMetric(label, kind, (100 * value.success / value.valid).toFixed(2) + "%", `${value.success.toLocaleString()} / ${value.valid.toLocaleString()}${source}`);
+      };
+      countMetric("TSR · 任务成功", "metric-tsr", tsr, reported?.utility_rate);
+      countMetric("ASR · 攻击成功", "metric-asr", asr, reported?.attack_success_rate, run.attack_name === "none");
+      addMetric("已记录 Token", "metric-token", tokens.recorded == null ? "未记录" : tokens.recorded.toLocaleString(), tokens.recorded == null ? "" : tokens.complete ? "" : "可能不完整");
+      card.append(metrics);
+      container.append(card);
+    });
   }
 
   function renderSummaryTable(experiments) {

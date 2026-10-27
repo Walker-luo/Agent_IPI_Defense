@@ -256,7 +256,7 @@ function updateRunPreview() {
   $('#preview-layer-l2 small').textContent = `${toolView ? '仅展示已授权工具' : '完整工具目录'}；${precheck ? '非法批次整体拒绝' : '执行前复核权限'}`;
   $('#workspace-audit-note').textContent = isOrigin
     ? 'BaseIntent 控件不参与原生评测。'
-    : checker ? '网页/API 默认 off，CLI 默认 shadow；各模式均免审 public/internal 读取，其余保留 L3。'
+    : checker ? '网页/API 默认 off，CLI 默认 shadow；各模式均免审已注册、授权且 schema 合法的 public/internal 读取，其余保留 L3。'
     : '本配置关闭 L3；工具执行仍由 Monitor 与票据控制。';
 
   if ($("#preview-suites")) $("#preview-suites").textContent = `${selectedSuites.length} / ${allSuites.length}`;

@@ -42,7 +42,7 @@ function historyUI(catalog, filters) {
     document, window: {setInterval() {}, setTimeout() {}}, historySelection: selection, historyCharts, analysisRequests: gate,
     catalog, filters, suiteSelection: null,
     experimentStyles: historyCharts.createExperimentStyles(catalog), exporting: false,
-    updateControls() {}, loadCatalog() {}, clearCharts() {}, renderSummaryTable() {}, showEmpty() {}, analyze() {}, exportAnalysis() {},
+    updateControls() {}, loadCatalog() {}, clearCharts() {}, renderSummaryTable() {}, renderOverview() {}, showEmpty() {}, analyze() {}, exportAnalysis() {},
     addOption(select, value, text) { const node = new Element(); node.value = value; node.textContent = text; select.append(node); },
   };
   vm.createContext(context);
@@ -195,4 +195,63 @@ test('multi-suite charts keep separate scenario values while one selected scene 
   ui.context.renderAnalysis({experiments:[{...run,suites:[run.suites[0]]}]}, {view:'bar',metrics:['utility_rate'],suites:['travel']});
   assert.deepEqual(Array.from(configs[0].data.labels),['v1']);
   assert.deepEqual(Array.from(configs[0].data.datasets[0].data),[50]);
+});
+
+test('overview cards match the experiment color and show counts, rates and cost completeness', () => {
+  const identity = {id:'agentdojo', repository:'repo', revision:'rev', suite_version:'v', implementation_sha256:'impl', catalog_sha256:'cat'};
+  const run = {id:'run', model_suffix:'version', source:'results/<example>', benchmark_id:'agentdojo', attack_name:'attack',
+    suites:[{suite_name:'travel', benchmark:identity, metrics:{utility_rate:50,attack_success_rate:20},
+      overview:{tsr:{success:1,valid:2}, asr:null, tokens:{recorded:1234,complete:false}}}]};
+  const ui = historyUI([{...run,model_group:'version',result_folder:'benchmarks'}], {});
+  vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')) + ui.source.slice(ui.source.indexOf('  function addCell('), ui.source.indexOf('  function formatRate(')), ui.context);
+  ui.context.renderOverview([run]);
+  const card = ui.nodes.get('#history-overview-cards').children[0];
+  assert.equal(card.className, 'history-overview-card');
+  assert.equal(card.style.borderLeftColor, ui.context.experimentStyles.run.color);
+  const header = card.children[0], metrics = card.children[1].children;
+  assert.match(header.children[1].children[1].textContent, /results\/<example>/);
+  assert.equal(metrics[0].children[1].textContent, '50.00%');
+  assert.equal(metrics[0].children[2].textContent, '1 / 2');
+  assert.equal(metrics[1].children[1].textContent, '20.00%');
+  assert.equal(metrics[1].children[2].textContent, '原汇总；分子 / 分母未记录');
+  assert.equal(metrics[2].children[1].textContent, '1,234');
+  assert.equal(metrics[2].children[2].textContent, '可能不完整');
+  ui.context.renderOverview([]);
+  assert.match(ui.nodes.get('#history-overview-cards').children[0].textContent, /选择结果/);
+});
+
+test('overview cards retain clean, unknown and record-provenance states', () => {
+  const makeRun = (id, attack_name, overview) => ({id, model_suffix:id, model_group:id, source:id,
+    result_folder:'benchmarks', attack_name, suites:[{suite_name:'travel', benchmark:null, metrics:{}, overview}]});
+  const runs = [
+    makeRun('clean','none',{tsr:{success:0,valid:0},asr:null,tokens:{recorded:null,complete:false}}),
+    makeRun('observed','attack',{tsr:{success:2,valid:4,source:'records_unknown'},asr:{success:1,valid:4,source:'records'},tokens:{recorded:0,complete:true}}),
+  ];
+  const ui = historyUI(runs, {});
+  vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')), ui.context);
+  ui.context.renderOverview(runs);
+  const cards = ui.nodes.get('#history-overview-cards').children;
+  const clean = cards[0].children[1].children, observed = cards[1].children[1].children;
+  assert.equal(clean[0].children[1].textContent, '不适用');
+  assert.equal(clean[0].children[2].textContent, '0 / 0');
+  assert.equal(clean[1].children[2].textContent, '良性评测');
+  assert.equal(clean[2].children[1].textContent, '未记录');
+  assert.match(observed[0].children[2].textContent, /明细含状态未知/);
+  assert.match(observed[1].children[2].textContent, /明细统计/);
+  assert.equal(observed[2].children[1].textContent, '0');
+  assert.notEqual(cards[0].style.borderLeftColor, cards[1].style.borderLeftColor);
+});
+
+test('overview places corresponding scenes together for comparison', () => {
+  const runs = ['first', 'second'].map(id => ({id, model_suffix:id, model_group:id, source:id,
+    result_folder:'benchmarks', attack_name:'attack', suites:['banking','travel'].map(suite_name => ({
+      suite_name, benchmark:null, metrics:{}, overview:{tsr:null,asr:null,tokens:{recorded:null,complete:false}},
+    }))}));
+  const ui = historyUI(runs, {});
+  vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')), ui.context);
+  ui.context.renderOverview(runs);
+  const cards = ui.nodes.get('#history-overview-cards').children;
+  assert.match(cards[0].children[0].children[1].children[1].textContent, /banking/);
+  assert.match(cards[1].children[0].children[1].children[1].textContent, /banking/);
+  assert.match(cards[2].children[0].children[1].children[1].textContent, /travel/);
 });

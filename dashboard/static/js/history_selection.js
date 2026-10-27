@@ -40,7 +40,32 @@
       isCurrent: request => request === revision,
     };
   }
-  const api = { filterRuns, resolveFilters, visibleSelection, attackLabel, backendLabel, createRequestGate };
+  function overviewGroups(experiments) {
+    return experiments.flatMap(run => {
+      const suites = run.suites || [];
+      const identity = suites[0]?.benchmark;
+      const sameIdentity = identity && ["id", "repository", "revision", "suite_version", "implementation_sha256", "catalog_sha256"].every(key => identity[key]) && suites.every(suite => suite.benchmark &&
+        JSON.stringify(suite.benchmark) === JSON.stringify(identity));
+      const groups = sameIdentity ? [suites] : suites.map(suite => [suite]);
+      return groups.filter(group => group.length).map(group => {
+        const counts = key => {
+          const values = group.map(suite => suite.overview?.[key]);
+          if (values.some(value => !value)) return null;
+          const result = values.reduce((sum, value) => ({success: sum.success + value.success, valid: sum.valid + value.valid}), {success: 0, valid: 0});
+          if (values.some(value => value.source === "records_unknown")) result.source = "records_unknown";
+          else if (values.some(value => value.source === "records")) result.source = "records";
+          return result;
+        };
+        const usage = group.map(suite => suite.overview?.tokens);
+        const recorded = usage.filter(value => value?.recorded != null);
+        return {run, suites: group.map(suite => suite.suite_name), tsr: counts("tsr"), asr: counts("asr"),
+          reported: group.length === 1 ? group[0].metrics : null,
+          tokens: {recorded: recorded.length ? recorded.reduce((sum, value) => sum + value.recorded, 0) : null,
+                   complete: recorded.length === group.length && usage.every(value => value.complete)}};
+      });
+    });
+  }
+  const api = { filterRuns, resolveFilters, visibleSelection, attackLabel, backendLabel, createRequestGate, overviewGroups };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.BaseIntentHistorySelection = api;
 })(typeof window === "undefined" ? globalThis : window);

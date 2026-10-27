@@ -2,6 +2,22 @@
 
 Screen 直接请求每个注入 GOAL，给每个目标一次完整原生轨迹：成功保留，失败排除，错误/中断单列跳过。不进行同轮、同名续跑或历史证据中的第二次机会。GOAL 不是用户×注入的计分任务，不能进入 TSR/ASR 分母。
 
+## 参数
+
+筛选使用 `screen` 子命令，以原生无防御 Agent 直接执行注入 GOAL；没有 benchmark 的攻击选择或防御参数。
+
+| 参数 | 简要说明 |
+| --- | --- |
+| `screen` | 创建或恢复一次 GOAL 筛选，冻结成功目标名单。 |
+| `--suites SUITE [SUITE ...]` | 选择当前后端场景，默认全部；AgentDojo 与 AgentDyn 场景不能混选。 |
+| `--model-config PATH` | 主模型配置 TOML，缺省按环境变量／本地 `config/models.local.toml` 解析。 |
+| `--name NAME` | 必填；筛选运行名称，中断后使用相同名称和配置继续。 |
+| `--results-dir DIR` | 结果根目录，默认 `results/injection_precheck`；名单位于运行目录的 `cohort.json`。 |
+| `--reuse-from PATH` | 可选；只读复用指定历史 baseline 运行中的首份兼容 GOAL 证据，不重试已失败目标。 |
+| `--help` | 查看帮助；筛选参数列表使用 `python -m experiments.run_injection_precheck screen --help`。 |
+
+screen 自带进度输出，无需 `--progress`；续跑直接重复同一命令，无需 `--reuse`，也不支持 `--force-rerun`。
+
 ## 创建名单
 
 从 BaseIntent 根目录激活目标环境，核对配置后执行；本命令会调用真实模型：

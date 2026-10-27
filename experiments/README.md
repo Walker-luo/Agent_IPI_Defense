@@ -40,4 +40,4 @@ python -m experiments.tools.generate_tool_metadata --help
 
 工程自检或启发式诊断不改原生评分，也不证明真实评测/一般安全通过。历史阈值校准不控制当前固定 public/internal 读取免审。工具目录根据实际后端解析，不自动推断或弱化副作用。
 
-新检查产物使用 `artifacts/<日期>_<任务>/`，full/partial 显式 `--results-dir`；默认用户测量根仍在 `results/`。现有历史结果、凭证和证据不覆盖、不迁移。配置见[模型与工具](../docs/model_tool_configuration.md)，报告/成本/原始回复见[结果文件](../docs/result_files.md)，框架解释见[BaseIntent](../docs/framework.md)。
+新检查产物使用 `artifacts/<日期>_<任务>/`，full/partial 显式 `--results-dir`；默认用户测量根仍在 `results/`。现有历史结果、凭证和证据不覆盖、不迁移。配置见[模型与工具](../docs/reference/model_tool_configuration.md)，报告/成本/原始回复见[结果文件](../docs/reference/result_files.md)，框架解释见[BaseIntent](../docs/reference/framework.md)。

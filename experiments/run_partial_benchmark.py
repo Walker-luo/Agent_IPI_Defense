@@ -903,7 +903,7 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
     parser.add_argument('--no-delegated-tasks', action='store_true', help='关闭显式任务文件展开，用于原任务编译对照。')
     parser.add_argument('--prompt-profile', choices=PROMPT_PROFILES, default='legacy',
                         help='legacy=BaseIntent 意图流程（默认）；legacy-v34=历史v3.4对照；其余为显式旧候选')
-    parser.add_argument('--l1-projection-mode', choices=('off','shadow','projected'), default='projected',
+    parser.add_argument('--l1-projection-mode', choices=('off','shadow','projected'), default='off',
                         help='L1有限交易投影，默认projected；off保留旧来源封装，shadow只观察。')
     # None selects the profile default below: BaseIntent shadow, baseline/NoChecker off.
     parser.add_argument("--audit-router-mode", choices=("off", "shadow", "selective"), default=None,

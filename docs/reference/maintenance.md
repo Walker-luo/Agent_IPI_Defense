@@ -36,6 +36,14 @@ README／docs 已精简，当前介绍见[框架](framework.md)，平台同步�
 
 唯一配对损失为travel clean `user_task_1`：两组都在answer阶段提前创建日历事件；改名前之后停在后续意图，BaseIntent推进后再次创建，原生精确状态差分判失败。这暴露既有阶段／效果归属问题，不据此认定重命名造成退化，也不宣称效用等价或安全通过。本次不改进度算法、不补任务特例、不追加调用。下一步应另行解决重复效果与阶段归属。
 
-逐例ID、命令／退出、哈希与调用明细见 [本轮证据](../artifacts/20261027_project_cleanup/report.md) 和 [结构化对照](../artifacts/20261027_project_cleanup/online_comparison.json)。证据默认忽略，不是运行依赖；同步仓库后不一定包含本地验证附件。
+逐例ID、命令／退出、哈希与调用明细见 [本轮证据](../../artifacts/20261027_project_cleanup/report.md) 和 [结构化对照](../../artifacts/20261027_project_cleanup/online_comparison.json)。证据默认忽略，不是运行依赖；同步仓库后不一定包含本地验证附件。
 
 自动审批最初拒绝未经逐文件核对的全局替换；该命令未执行，已改为逐文件快照核验、AST导入和命名token迁移。在线启动曾因授权范围被拒，随后用户明确授权本轮18例及必要预检，按该上限完成。
+
+## 文档整理（2026-10-27）
+
+基线为分支 `BaseIntent`、HEAD `ad135a4447e3409c6d1ad4d6458573b93a6f2402`；开始时已有 AGENTS、状态文件和 partial runner 的未提交改动。根目录仅保留三份运行指南，其他10份文档移至 `docs/reference/`；修正当前文档入口和相对链接，并补充三份指南的参数、默认值及组合限制。
+
+在 `ipi` 和 `ipi-agentdyn` 分别运行 full／partial 的 `--help` 与 `run_injection_precheck screen --help`，6条命令全部 exit 0；文档链接／锚点、参数名与当前CLI定义、目录结构及三个runner原哈希检查通过，`git diff --check` exit 0。完整命令和结果见 `artifacts/20261027_docs_cleanup/`，路径相对项目根目录。
+
+本次只调整文档与入口，未改runner／防御逻辑，未重跑完整回归或调用模型；API调用与Token成本均为0。用户现有CLI改动的实际投影默认值为 off，API/factory 默认 projected，文档已区分；现有CLI帮助仍写默认projected，留待代码任务同步。后续继续框架设计和优化，既有回归失败和研究限制不因文档整理改变。

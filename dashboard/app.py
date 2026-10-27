@@ -710,7 +710,32 @@ def _normalize_history_suite(summary: dict, suite_name: str, is_fraction: bool) 
     sec_prompt = _history_int(security.get("prompt_tokens"))
     sec_completion = _history_int(security.get("completion_tokens"))
     sec_total = _history_int(security.get("total_tokens")) or sec_prompt + sec_completion
+    def explicit_counts(success_key, valid_key):
+        success, valid = task_counts.get(success_key), task_counts.get(valid_key)
+        if (type(success) is int and type(valid) is int and 0 <= success <= valid):
+            return {"success": success, "valid": valid}
+        return None
+
+    def recorded_tokens(value):
+        if not isinstance(value, dict):
+            return None
+        total = value.get("total_tokens")
+        if type(total) is int and total >= 0:
+            return total
+        prompt, completion = value.get("prompt_tokens"), value.get("completion_tokens")
+        if type(prompt) is int and type(completion) is int and prompt >= 0 and completion >= 0:
+            return prompt + completion
+        return None
+
+    recorded_main, recorded_security = recorded_tokens(overhead), recorded_tokens(security)
+    recorded = [n for n in (recorded_main, recorded_security) if n is not None]
     return {
+        "overview": {
+            "tsr": explicit_counts("utility_passed", "utility_valid"),
+            "asr": explicit_counts("attack_successes", "security_valid"),
+            "tokens": {"recorded": sum(recorded) if recorded else None,
+                       "complete": summary.get("cost_comparison_ready") is True and recorded_main is not None},
+        },
         "main_overhead": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": total_tokens},
         "sec_overhead": {"prompt_tokens": sec_prompt, "completion_tokens": sec_completion, "total_tokens": sec_total},
         "security_usage_recorded": bool(security),
@@ -1077,6 +1102,28 @@ def _load_history_task_records(
     return records, truncated
 
 
+def _history_overview_from_records(suite, records, truncated):
+    """Recover missing counts only from complete, identifiable records matching the summary."""
+    total = suite["task_counts"].get("total_tasks")
+    keys = [(r["user_task_id"], r["injection_task_id"], r["model_id"]) for r in records]
+    if truncated or not records or len(records) != total or any(not key[0] for key in keys) or len(set(keys)) != len(keys):
+        return
+    observed = [r for r in records if r["sample_status"] in ("valid", "unknown")]
+    for name, field, rate_key in (("tsr", "utility_success", "utility_rate"),
+                                   ("asr", "attack_success", "attack_success_rate")):
+        if suite["overview"][name] is not None:
+            continue
+        values = [r for r in observed if isinstance(r.get(field), bool)]
+        rate = suite["metrics"].get(rate_key)
+        if not values or rate is None:
+            continue
+        success = sum(r[field] for r in values)
+        if abs(success * 100 / len(values) - rate) > 0.011:
+            continue
+        source = "records_unknown" if any(r["sample_status"] == "unknown" for r in values) else "records"
+        suite["overview"][name] = {"success": success, "valid": len(values), "source": source}
+
+
 # =============================================
 # API 路由
 # =============================================
@@ -1203,15 +1250,15 @@ def _build_history_analysis(payload):
                 suite_name,
                 is_fraction,
             )
-            if include_task_records:
+            needs_counts = any(suite_result["overview"][key] is None for key in ("tsr", "asr"))
+            if include_task_records or needs_counts:
                 records, truncated = _load_history_task_records(
-                    suite_entry,
-                    internal["overall_records"],
-                    suite_name,
-                    remaining_records,
+                    suite_entry, internal["overall_records"], suite_name, remaining_records,
                 )
-                suite_result["task_records"] = records
-                suite_result["task_records_truncated"] = truncated
+                _history_overview_from_records(suite_result, records, truncated)
+                if include_task_records:
+                    suite_result["task_records"] = records
+                    suite_result["task_records_truncated"] = truncated
                 remaining_records -= len(records)
             experiment["suites"].append(suite_result)
         experiments.append(experiment)

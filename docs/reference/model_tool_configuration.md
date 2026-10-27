@@ -2,7 +2,7 @@
 
 ## 环境与后端
 
-从 BaseIntent 根目录执行。AgentDojo 使用 `conda activate ipi`，AgentDyn 使用 `conda activate ipi-agentdyn`；环境定义分别见 [environment.yml](../environment.yml) 和 [environment-agentdyn.yml](../environment-agentdyn.yml)。
+从 BaseIntent 根目录执行。AgentDojo 使用 `conda activate ipi`，AgentDyn 使用 `conda activate ipi-agentdyn`；环境定义分别见 [environment.yml](../../environment.yml) 和 [environment-agentdyn.yml](../../environment-agentdyn.yml)。
 
 ```bash
 python -m baseintent.benchmark_catalog
@@ -14,7 +14,7 @@ python -m baseintent.benchmark_catalog
 
 ## 模型配置
 
-保留已有 `config/models.local.toml`；首次使用可复制 [models.example.toml](../config/models.example.toml)，填写实际服务配置。凭证只保存在忽略的本地文件或环境变量中，不写公开结果。示意：
+保留已有 `config/models.local.toml`；首次使用可复制 [models.example.toml](../../config/models.example.toml)，填写实际服务配置。凭证只保存在忽略的本地文件或环境变量中，不写公开结果。示意：
 
 ```toml
 [main]
@@ -54,14 +54,14 @@ model_id = "qwen3.7-flash"
 
 解析顺序：显式 `--tool-metadata` / API 路径 → `BASEINTENT_TOOL_METADATA` → `config/tools.<backend>.local.toml` → 可完整识别且属于当前后端的 `config/tools.local.toml` → 当前后端内置审核目录。跨后端的已识别通用副本会提示跳过，未知自定义通用目录报错。目录缺项或不兼容在模型调用前失败，不合并分类、不覆盖本地配置。原生 baseline 不加载防御风险目录。
 
-内置目录：[AgentDojo](../config/tools.agentdojo-v1.2.toml)、[AgentDyn](../config/tools.agentdyn-v1.2.toml)。AgentDyn 网页 handler 可能发送、付款或改文件，OTP 可能执行排队动作；不能从工具名称推断只读。
+内置目录：[AgentDojo](../../config/tools.agentdojo-v1.2.toml)、[AgentDyn](../../config/tools.agentdyn-v1.2.toml)。AgentDyn 网页 handler 可能发送、付款或改文件，OTP 可能执行排队动作；不能从工具名称推断只读。
 
 ## 运行控制
 
 | 选项 | 默认 / 作用 |
 | --- | --- |
 | `--prompt-profile legacy` | 当前 BaseIntent 流程；历史显式 profile 保持原义 |
-| `--l1-projection-mode projected` | 有界投影；可选 off/shadow |
+| `--l1-projection-mode` | 当前 full/partial CLI 默认 off；API/factory 默认 projected。off 保留来源封装，shadow 仅观察，projected 启用有界投影 |
 | `--audit-router-mode` | 防御 CLI shadow；baseline/NoChecker off；API/factory off |
 | `--audit-router-threshold 0.70` | 诊断与配置绑定，不调节固定免审 |
 | `--audit-retries 0` | 默认无语义重审；显式支持 0/1 |
