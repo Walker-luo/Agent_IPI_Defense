@@ -558,20 +558,31 @@ button, input, select { letter-spacing: 0; }
 .history-overview-heading h2 { margin: 0 0 12px; color: var(--text); font-size: 16px; font-weight: 650; }
 .history-overview-heading p, .history-overview-note { color: var(--text-muted); font-size: 11px; line-height: 1.6; }
 .history-overview-note { margin: 8px 0 0; }
-.history-overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 10px; }
+.history-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .history-overview-empty { margin: 0; padding: 20px 4px; color: var(--text-secondary); font-size: 12px; }
 .history-overview-card { min-width: 0; padding: 14px 15px 13px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-raised); }
 .history-overview-card-heading { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
-.history-overview-card-heading > div { min-width: 0; }
+.history-overview-card-heading > div { flex: 1; min-width: 0; }
 .history-overview-card-heading h3 { margin: 0; color: var(--text); font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .history-overview-card-heading p { margin: 3px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.history-overview-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-.history-overview-metric { min-width: 0; }
-.history-overview-metric-label, .history-overview-metric small { display: block; color: var(--text-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
-.history-overview-metric-value { display: block; margin: 4px 0; font-size: clamp(16px, 1.5vw, 22px); line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.history-overview-metric.metric-tsr .history-overview-metric-value { color: #70d6b8; }
-.history-overview-metric.metric-asr .history-overview-metric-value { color: #f39b91; }
-.history-overview-metric.metric-token .history-overview-metric-value { color: #a2c7fa; }
+.history-attack-tag { flex-shrink: 0; max-width: 45%; padding: 4px 8px; border: 1px solid #697a76; border-radius: 4px; color: #c4cfca; background: #293330; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.history-attack-tag.attack-clean { color: #91dec3; border-color: #437f6a; background: #203b31; }
+.history-attack-tag.attack-ignore { color: #ffc189; border-color: #9b6a3b; background: #413023; }
+.history-attack-tag.attack-important { color: #e3bbf4; border-color: #89629b; background: #38283f; }
+.history-attack-tag.attack-knowledge { color: #acd0ff; border-color: #5d7da8; background: #25354a; }
+.history-attack-tag.attack-mixed { color: #ffd293; border-color: #9a7747; background: #403522; }
+.history-overview-table-wrap { margin-top: 12px; overflow-x: auto; }
+.history-overview-table-wrap:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.history-overview-table { width: 100%; min-width: 510px; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.history-overview-table th, .history-overview-table td { padding: 8px 10px; border-top: 1px solid var(--border); text-align: left; vertical-align: top; }
+.history-overview-table thead th { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.history-overview-table tbody th { color: var(--text); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.history-overview-table .history-overview-total { background: rgba(255, 255, 255, 0.035); }
+.history-overview-metric strong { display: block; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
+.history-overview-metric small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.history-overview-metric.metric-tsr strong { color: #70d6b8; }
+.history-overview-metric.metric-asr strong { color: #f39b91; }
+.history-overview-metric.metric-token strong { color: #a2c7fa; }
 .history-visual-section, .history-table-section { margin-top: 22px; }
 .history-chart-heading { margin-bottom: 10px; }
 .history-chart-heading h2 { margin: 0; color: var(--text); font-size: 16px; font-weight: 650; }

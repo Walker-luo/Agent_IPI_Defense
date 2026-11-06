@@ -197,61 +197,74 @@ test('multi-suite charts keep separate scenario values while one selected scene 
   assert.deepEqual(Array.from(configs[0].data.datasets[0].data),[50]);
 });
 
-test('overview cards match the experiment color and show counts, rates and cost completeness', () => {
+test('overview presents one table per result with each scene and a safe total', () => {
   const identity = {id:'agentdojo', repository:'repo', revision:'rev', suite_version:'v', implementation_sha256:'impl', catalog_sha256:'cat'};
-  const run = {id:'run', model_suffix:'version', source:'results/<example>', benchmark_id:'agentdojo', attack_name:'attack',
-    suites:[{suite_name:'travel', benchmark:identity, metrics:{utility_rate:50,attack_success_rate:20},
-      overview:{tsr:{success:1,valid:2}, asr:null, tokens:{recorded:1234,complete:false}}}]};
+  const suite = (suite_name, success) => ({suite_name, benchmark:identity, metrics:{},
+    overview:{tsr:{success,valid:2},asr:{success:0,valid:2,source:'records'},tokens:{recorded:1000,complete:false}}});
+  const run = {id:'run', model_suffix:'version', source:'results/<example>', benchmark_id:'agentdojo', attack_name:'ignore_previous', suites:[suite('banking',1),suite('travel',2)]};
   const ui = historyUI([{...run,model_group:'version',result_folder:'benchmarks'}], {});
-  vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')) + ui.source.slice(ui.source.indexOf('  function addCell('), ui.source.indexOf('  function formatRate(')), ui.context);
+  vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')), ui.context);
   ui.context.renderOverview([run]);
-  const card = ui.nodes.get('#history-overview-cards').children[0];
-  assert.equal(card.className, 'history-overview-card');
+  const cards = ui.nodes.get('#history-overview-cards').children;
+  assert.equal(cards.length, 1);
+  const card = cards[0], header = card.children[0], body = card.children[1].children[0].children[1];
   assert.equal(card.style.borderLeftColor, ui.context.experimentStyles.run.color);
-  const header = card.children[0], metrics = card.children[1].children;
   assert.match(header.children[1].children[1].textContent, /results\/<example>/);
-  assert.equal(metrics[0].children[1].textContent, '50.00%');
-  assert.equal(metrics[0].children[2].textContent, '1 / 2');
-  assert.equal(metrics[1].children[1].textContent, '20.00%');
-  assert.equal(metrics[1].children[2].textContent, '原汇总；分子 / 分母未记录');
-  assert.equal(metrics[2].children[1].textContent, '1,234');
-  assert.equal(metrics[2].children[2].textContent, '可能不完整');
+  assert.equal(header.children[2].textContent, 'ignore_previous');
+  assert.equal(body.children.length, 3);
+  assert.equal(body.children[0].children[0].textContent, '整体');
+  assert.equal(body.children[0].children[1].children[0].textContent, '75.00%');
+  assert.equal(body.children[0].children[1].children[1].textContent, '3 / 4');
+  assert.equal(body.children[1].children[0].textContent, 'banking');
+  assert.equal(body.children[2].children[0].textContent, 'travel');
+  assert.equal(body.children[1].children[3].children[1].textContent, '可能不完整');
   ui.context.renderOverview([]);
   assert.match(ui.nodes.get('#history-overview-cards').children[0].textContent, /选择结果/);
 });
 
-test('overview cards retain clean, unknown and record-provenance states', () => {
-  const makeRun = (id, attack_name, overview) => ({id, model_suffix:id, model_group:id, source:id,
-    result_folder:'benchmarks', attack_name, suites:[{suite_name:'travel', benchmark:null, metrics:{}, overview}]});
-  const runs = [
-    makeRun('clean','none',{tsr:{success:0,valid:0},asr:null,tokens:{recorded:null,complete:false}}),
-    makeRun('observed','attack',{tsr:{success:2,valid:4,source:'records_unknown'},asr:{success:1,valid:4,source:'records'},tokens:{recorded:0,complete:true}}),
-  ];
+test('overview keeps unverified scenes separate, retains missing states and distinguishes attacks', () => {
+  const overview = (tsr,asr,tokens) => ({tsr,asr,tokens});
+  const make = (id, attack_name, suites) => ({id, model_suffix:id, model_group:id, source:id, result_folder:'benchmarks',attack_name,suites});
+  const runs = [make('clean','none',[
+    {suite_name:'a',benchmark:null,metrics:{},overview:overview({success:0,valid:0},null,{recorded:null,complete:false})},
+    {suite_name:'b',benchmark:null,metrics:{},overview:overview({success:1,valid:2,source:'records_unknown'},null,{recorded:0,complete:true})},
+  ]), make('observed','tool_knowledge',[
+    {suite_name:'a',benchmark:null,metrics:{attack_success_rate:20},overview:overview(null,null,{recorded:42,complete:false})},
+  ])];
   const ui = historyUI(runs, {});
   vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')), ui.context);
   ui.context.renderOverview(runs);
   const cards = ui.nodes.get('#history-overview-cards').children;
-  const clean = cards[0].children[1].children, observed = cards[1].children[1].children;
-  assert.equal(clean[0].children[1].textContent, '不适用');
-  assert.equal(clean[0].children[2].textContent, '0 / 0');
-  assert.equal(clean[1].children[2].textContent, '良性评测');
-  assert.equal(clean[2].children[1].textContent, '未记录');
-  assert.match(observed[0].children[2].textContent, /明细含状态未知/);
-  assert.match(observed[1].children[2].textContent, /明细统计/);
-  assert.equal(observed[2].children[1].textContent, '0');
-  assert.notEqual(cards[0].style.borderLeftColor, cards[1].style.borderLeftColor);
+  assert.equal(cards.length,2);
+  assert.notEqual(cards[0].children[0].children[2].className,cards[1].children[0].children[2].className);
+  const clean = cards[0].children[1].children[0].children[1].children;
+  assert.equal(clean.length,2);
+  assert.equal(clean[0].children[1].children[0].textContent,'不适用');
+  assert.equal(clean[0].children[2].children[1].textContent,'良性评测');
+  assert.equal(clean[0].children[3].children[0].textContent,'未记录');
+  assert.match(clean[1].children[1].children[1].textContent,/明细含状态未知/);
+  assert.equal(clean[1].children[3].children[0].textContent,'0');
+  const row = cards[1].children[1].children[0].children[1].children[0];
+  assert.equal(row.children[2].children[0].textContent,'20.00%');
+  assert.equal(row.children[2].children[1].textContent,'原汇总；分子 / 分母未记录');
 });
 
-test('overview places corresponding scenes together for comparison', () => {
-  const runs = ['first', 'second'].map(id => ({id, model_suffix:id, model_group:id, source:id,
-    result_folder:'benchmarks', attack_name:'attack', suites:['banking','travel'].map(suite_name => ({
-      suite_name, benchmark:null, metrics:{}, overview:{tsr:null,asr:null,tokens:{recorded:null,complete:false}},
-    }))}));
+test('overview groups attacks and keeps the same natural result order in every group', () => {
+  const runs = [
+    ['tool_knowledge','model_v10'], ['ignore_previous','model_v2'],
+    ['tool_knowledge','model_v2'], ['ignore_previous','model_v10'],
+    ['tool_knowledge','model_v1'], ['ignore_previous','model_v1'],
+  ].map(([attack_name,model_group]) => ({id:model_group+'/'+attack_name, model_group, model_suffix:model_group,
+    source:model_group+'/'+attack_name, result_folder:'benchmarks', attack_name,
+    suites:[{suite_name:'travel',benchmark:null,metrics:{},overview:{tsr:null,asr:null,tokens:{recorded:null,complete:false}}}]}));
   const ui = historyUI(runs, {});
   vm.runInContext(ui.source.slice(ui.source.indexOf('  function renderOverview('), ui.source.indexOf('  function renderSummaryTable(')), ui.context);
   ui.context.renderOverview(runs);
-  const cards = ui.nodes.get('#history-overview-cards').children;
-  assert.match(cards[0].children[0].children[1].children[1].textContent, /banking/);
-  assert.match(cards[1].children[0].children[1].children[1].textContent, /banking/);
-  assert.match(cards[2].children[0].children[1].children[1].textContent, /travel/);
+  const order = ui.nodes.get('#history-overview-cards').children.map(card =>
+    [card.children[0].children[2].textContent, card.children[0].children[1].children[0].textContent]);
+  assert.deepEqual(order, [
+    ['ignore_previous','v1'], ['ignore_previous','v2'], ['ignore_previous','v10'],
+    ['tool_knowledge','v1'], ['tool_knowledge','v2'], ['tool_knowledge','v10'],
+  ]);
+  assert.equal(runs[0].attack_name,'tool_knowledge');
 });

@@ -608,15 +608,20 @@
   function renderOverview(experiments) {
     const container = document.querySelector("#history-overview-cards");
     container.replaceChildren();
-    const groups = historySelection.overviewGroups(experiments).sort((a, b) => a.suites.join("、").localeCompare(b.suites.join("、")));
-    if (!groups.length) {
+    const compare = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, {numeric: true});
+    const runs = experiments.filter(run => (run.suites || []).length).sort((a, b) =>
+      compare(a.attack_name || "unknown", b.attack_name || "unknown") ||
+      compare(a.model_group || a.model_suffix || a.label, b.model_group || b.model_suffix || b.label) ||
+      compare(a.result_folder, b.result_folder) || compare(a.source || a.id, b.source || b.id));
+    if (!runs.length) {
       const empty = document.createElement("p");
       empty.className = "history-overview-empty";
       empty.textContent = "选择结果并生成分析后显示。";
       container.append(empty);
       return;
     }
-    groups.forEach(({run, suites, tsr, asr, tokens, reported}) => {
+    const attackStyles = {none: "clean", ignore_previous: "ignore", important_instructions: "important", tool_knowledge: "knowledge", mixed: "mixed"};
+    runs.forEach(run => {
       const card = document.createElement("article");
       card.className = "history-overview-card";
       const style = experimentStyles[run.id];
@@ -628,38 +633,70 @@
       const title = document.createElement("h3");
       title.textContent = historyCharts.describeExperiment(run).label;
       const detail = document.createElement("p");
-      detail.textContent = [historySelection.backendLabel(run.benchmark_id || "unknown"), historySelection.attackLabel(run.attack_name), suites.join("、"), run.source].filter(Boolean).join(" · ");
+      detail.textContent = [historySelection.backendLabel(run.benchmark_id || "unknown"), run.source].filter(Boolean).join(" · ");
       identity.append(title, detail);
       header.append(identity);
+      const attack = document.createElement("span");
+      attack.className = "history-attack-tag attack-" + (attackStyles[run.attack_name] || "other");
+      attack.textContent = historySelection.attackLabel(run.attack_name) || "未记录攻击";
+      header.append(attack);
       card.append(header);
 
-      const metrics = document.createElement("div");
-      metrics.className = "history-overview-metrics";
-      const addMetric = (label, kind, value, detailText) => {
-        const metric = document.createElement("div");
-        metric.className = "history-overview-metric " + kind;
-        const name = document.createElement("span");
-        name.className = "history-overview-metric-label";
-        name.textContent = label;
+      const wrap = document.createElement("div");
+      wrap.className = "history-overview-table-wrap";
+      wrap.tabIndex = 0;
+      wrap.setAttribute("role", "region");
+      wrap.setAttribute("aria-label", historyCharts.describeExperiment(run).label + " 的测试数据表，可横向滚动");
+      const table = document.createElement("table");
+      table.className = "history-overview-table";
+      const thead = document.createElement("thead");
+      const headings = document.createElement("tr");
+      ["场景", "TSR · 任务成功", "ASR · 攻击成功", "已记录 Token"].forEach(label => {
+        const cell = document.createElement("th");
+        cell.scope = "col";
+        cell.textContent = label;
+        headings.append(cell);
+      });
+      thead.append(headings);
+      const tbody = document.createElement("tbody");
+      const addMetric = (row, kind, value, detailText) => {
+        const cell = document.createElement("td");
+        cell.className = "history-overview-metric " + kind;
         const number = document.createElement("strong");
-        number.className = "history-overview-metric-value";
         number.textContent = value;
         const note = document.createElement("small");
         note.textContent = detailText;
-        metric.append(name, number, note);
-        metrics.append(metric);
+        cell.append(number, note);
+        row.append(cell);
       };
-      const countMetric = (label, kind, value, rate, clean = false) => {
-        if (clean) return addMetric(label, kind, "不适用", "良性评测");
-        if (!value) return addMetric(label, kind, rate == null ? "未记录" : Number(rate).toFixed(2) + "%", rate == null ? "分子 / 分母未记录" : "原汇总；分子 / 分母未记录");
-        if (!value.valid) return addMetric(label, kind, "不适用", "0 / 0");
+      const countMetric = (row, kind, value, rate, clean = false) => {
+        if (clean) return addMetric(row, kind, "不适用", "良性评测");
+        if (!value) return addMetric(row, kind, rate == null ? "未记录" : Number(rate).toFixed(2) + "%", rate == null ? "分子 / 分母未记录" : "原汇总；分子 / 分母未记录");
+        if (!value.valid) return addMetric(row, kind, "不适用", "0 / 0");
         const source = value.source === "records_unknown" ? " · 明细含状态未知" : value.source === "records" ? " · 明细统计" : "";
-        addMetric(label, kind, (100 * value.success / value.valid).toFixed(2) + "%", `${value.success.toLocaleString()} / ${value.valid.toLocaleString()}${source}`);
+        addMetric(row, kind, (100 * value.success / value.valid).toFixed(2) + "%", `${value.success.toLocaleString()} / ${value.valid.toLocaleString()}${source}`);
       };
-      countMetric("TSR · 任务成功", "metric-tsr", tsr, reported?.utility_rate);
-      countMetric("ASR · 攻击成功", "metric-asr", asr, reported?.attack_success_rate, run.attack_name === "none");
-      addMetric("已记录 Token", "metric-token", tokens.recorded == null ? "未记录" : tokens.recorded.toLocaleString(), tokens.recorded == null ? "" : tokens.complete ? "" : "可能不完整");
-      card.append(metrics);
+      const addRow = (label, group, total = false) => {
+        const row = document.createElement("tr");
+        if (total) row.className = "history-overview-total";
+        const name = document.createElement("th");
+        name.scope = "row";
+        name.textContent = label;
+        row.append(name);
+        countMetric(row, "metric-tsr", group.tsr, group.reported?.utility_rate);
+        countMetric(row, "metric-asr", group.asr, group.reported?.attack_success_rate, run.attack_name === "none");
+        addMetric(row, "metric-token", group.tokens.recorded == null ? "未记录" : group.tokens.recorded.toLocaleString(), group.tokens.recorded == null || group.tokens.complete ? "" : "可能不完整");
+        tbody.append(row);
+      };
+      const groups = historySelection.overviewGroups([run]);
+      if (run.suites.length > 1 && groups.length === 1) addRow("整体", groups[0], true);
+      run.suites.forEach(suite => {
+        const group = historySelection.overviewGroups([{...run, suites: [suite]}])[0];
+        addRow(suite.suite_name, group);
+      });
+      table.append(thead, tbody);
+      wrap.append(table);
+      card.append(wrap);
       container.append(card);
     });
   }

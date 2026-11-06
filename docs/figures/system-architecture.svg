@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="system-architecture-title system-architecture-desc" id="system-architecture-root">
+<title id="system-architecture-title">BaseIntent system architecture</title>
+<desc id="system-architecture-desc">The trusted task is decomposed and authorized before agent planning, batch validation, action audit and monitored tool execution, with a fixed read exemption and feedback through isolated views and intent progress.</desc>
+<defs>
+      <style>#system-architecture-root { color: #172536; font-family: Arial, Helvetica, sans-serif; }
+      #system-architecture-root .diagram-container { width: 100%; overflow-x: auto; }
+      #system-architecture-root .heading { font: 700 30px Arial, Helvetica, sans-serif; fill: #16283e; }
+      #system-architecture-root .node-title { font: 700 21px Arial, Helvetica, sans-serif; fill: #172536; }
+      #system-architecture-root .node-sub { font: 16px Arial, Helvetica, sans-serif; fill: #283e52; }
+      #system-architecture-root .label { font: 600 15px Arial, Helvetica, sans-serif; fill: #344c64; }
+      #system-architecture-root .small { font: 15px Arial, Helvetica, sans-serif; fill: #344c64; }
+      #system-architecture-root .flow { fill: none; stroke: #405d78; stroke-width: 2.4; marker-end: url(#system-architecture-system-architecture-arrow); }
+      #system-architecture-root .return { fill: none; stroke: #50718d; stroke-width: 2.4; stroke-dasharray: 7 5; marker-end: url(#system-architecture-system-architecture-arrow); }
+      @media print {
+#system-architecture-root .diagram-container { overflow-x: visible; }
+}</style><marker id="system-architecture-system-architecture-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#405d78"/></marker></defs>
+<rect width="1280" height="720" fill="#ffffff"/>
+<text class="heading" x="640" y="54" text-anchor="middle">BaseIntent: task-aligned execution</text>
+<!-- Connectors precede nodes. -->
+<path class="flow" d="M 260 164 H 300"/>
+<path class="flow" d="M 360 216 V 252 Q 360 260 352 260 H 144 Q 136 260 136 268 V 320"/>
+<path class="flow" d="M 408 216 V 320"/>
+<path class="flow" d="M 232 372 H 276"/>
+<path class="flow" d="M 456 372 H 500"/>
+<path class="flow" d="M 680 372 H 724"/>
+<path class="flow" d="M 924 372 H 968"/>
+<!-- Exempt reads still join the monitor. -->
+<path class="flow" d="M 432 320 V 290 Q 432 282 440 282 H 816 Q 824 282 824 290 V 320"/>
+<!-- Tool returns and host events feed L1 / progress; the resulting view and current intent guide planning. -->
+<path class="return" d="M 1088 424 V 568 Q 1088 576 1080 576 H 940"/>
+<path class="return" d="M 340 576 H 152 Q 136 576 136 560 V 424"/>
+<!-- Opaque label backgrounds keep labels clear of lines. -->
+<rect x="504" y="244" width="246" height="28" fill="#ffffff"/>
+<text class="label" x="627" y="264" text-anchor="middle">Eligible reads bypass L3</text>
+<rect x="945" y="473" width="258" height="27" fill="#ffffff"/>
+<text class="label" x="1074" y="492" text-anchor="middle">returns + execution events</text>
+<rect x="152" y="460" width="178" height="27" fill="#ffffff"/>
+<text class="label" x="241" y="479" text-anchor="middle">view + current intent</text>
+<!-- Task and task-time authorization. -->
+<rect x="48" y="116" width="212" height="100" rx="7" fill="#f3f5f8" stroke="#77889a" stroke-width="2"/>
+<text class="node-title" x="154" y="154" text-anchor="middle">Trusted task</text>
+<text class="node-sub" x="154" y="184" text-anchor="middle">User request</text>
+<rect x="300" y="112" width="436" height="104" rx="7" fill="#e8f1ff" stroke="#2863a6" stroke-width="2.5"/>
+<text class="node-title" x="518" y="150" text-anchor="middle">L2 · Task authorization</text>
+<text class="node-sub" x="518" y="178" text-anchor="middle">Intent decomposition → fixed IDs</text>
+<text class="node-sub" x="518" y="201" text-anchor="middle">Global tools + progress associations</text>
+<!-- Main execution path. -->
+<rect x="40" y="320" width="192" height="104" rx="7" fill="#edf4fd" stroke="#4776ac" stroke-width="2"/>
+<text class="node-title" x="136" y="359" text-anchor="middle">Main model</text>
+<text class="node-sub" x="136" y="387" text-anchor="middle">Plans current intent</text>
+<text class="node-sub" x="136" y="410" text-anchor="middle">Calls or final answer</text>
+<rect x="276" y="320" width="180" height="104" rx="7" fill="#e9f5f2" stroke="#43877a" stroke-width="2"/>
+<text class="node-title" x="366" y="355" text-anchor="middle">L2 · Precheck</text>
+<text class="node-sub" x="366" y="382" text-anchor="middle">Whole-batch grant</text>
+<text class="node-sub" x="366" y="405" text-anchor="middle">and native schema</text>
+<rect x="500" y="320" width="180" height="104" rx="7" fill="#fff3e4" stroke="#af792e" stroke-width="2"/>
+<text class="node-title" x="590" y="355" text-anchor="middle">L3 · Audit</text>
+<text class="node-sub" x="590" y="382" text-anchor="middle">Current intent</text>
+<text class="node-sub" x="590" y="405" text-anchor="middle">Constraints + evidence</text>
+<rect x="724" y="320" width="200" height="104" rx="7" fill="#edf0fb" stroke="#646fa6" stroke-width="2"/>
+<text class="node-title" x="824" y="355" text-anchor="middle">Monitor</text>
+<text class="node-sub" x="824" y="382" text-anchor="middle">Batch receipt</text>
+<text class="node-sub" x="824" y="405" text-anchor="middle">One-use tickets</text>
+<rect x="968" y="320" width="240" height="104" rx="7" fill="#f2f4f6" stroke="#788695" stroke-width="2"/>
+<text class="node-title" x="1088" y="355" text-anchor="middle">Native tools</text>
+<text class="node-sub" x="1088" y="382" text-anchor="middle">Ticketed execution</text>
+<text class="node-sub" x="1088" y="405" text-anchor="middle">Original batch order</text>
+<!-- A single feedback grouping preserves two distinct functions. -->
+<rect x="340" y="520" width="600" height="112" rx="7" fill="#f4f8fb" stroke="#68859b" stroke-width="2"/>
+<line x1="640" y1="538" x2="640" y2="614" stroke="#b9c9d5" stroke-width="1.5"/>
+<text class="node-title" x="490" y="556" text-anchor="middle">L1 · Planning view</text>
+<text class="node-sub" x="490" y="584" text-anchor="middle">Source isolation; bounded</text>
+<text class="node-sub" x="490" y="607" text-anchor="middle">projection when applicable</text>
+<text class="node-title" x="790" y="556" text-anchor="middle">Intent progress</text>
+<text class="node-sub" x="790" y="584" text-anchor="middle">Host events + bounded</text>
+<text class="node-sub" x="790" y="607" text-anchor="middle">semantic judgment</text>
+<text class="small" x="640" y="680" text-anchor="middle">Eligible reads: registered, authorized, schema-valid public / internal reads.</text>
+</svg>
