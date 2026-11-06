@@ -40,12 +40,12 @@ python -m experiments.run_benchmark --clean \
   --results-dir artifacts/20261027_example/clean --progress
 
 # 读取已经冻结的目标名单；保留所选场景全部用户
-python -m experiments.run_benchmark --cohort artifacts/20261027_screen/agentdojo/MODEL_screen_01/cohort.json \
-  --model-config config/models.local.toml --name baseintent_cohort_01 \
-  --results-dir artifacts/20261027_example/cohort --progress
+python -m experiments.run_benchmark --fliter artifacts/20261027_screen/agentdojo/MODEL_screen_01/fliter.json \
+  --model-config config/models.local.toml --name baseintent_filtered_01 \
+  --results-dir artifacts/20261027_example/filtered --progress
 ```
 
-cohort 路径为占位示意，使用 screen 实际输出路径。cohort 不能与 clean、task-manifest 或清单导出组合，且必须有新 name。添加 `--baseline` 可作同名单原生对照。默认当前框架见[框架](reference/framework.md)，历史 profile 必须显式指定，`--name` 不选策略。
+排除表路径为占位示意，使用 screen 实际输出路径。筛选参数与 clean、DoS、清单导出互斥。添加 `--baseline` 可作同名单原生对照。默认当前框架见[框架](reference/framework.md)，历史 profile 必须显式指定，`--name` 不选策略。
 
 ## 常用参数
 
@@ -58,16 +58,19 @@ Full 与 partial 共用以下参数；可在命令后加 `--help` 查看完整�
 | `--baseline` | 使用原生无防御 Agent；默认运行 BaseIntent。 |
 | `--clean` | 无攻击效用控制；可与 `--baseline` 组合。 |
 | `--model-config PATH` | 模型配置 TOML；缺省按环境变量／本地 `config/models.local.toml` 解析。 |
-| `--name NAME` | 运行名称，仅命名输出；新实验建议显式填写，cohort 和 reuse 必填。 |
+| `--name NAME` | 运行名称，仅命名输出；新实验建议显式填写，reuse 必填。 |
 | `--results-dir DIR` | 结果根目录；full 默认 `results/benchmarks`，其下按后端和运行分层。 |
 | `--progress` | 显示进度，分别统计 GOAL 与计分任务。 |
-| `--cohort PATH` | 使用 screen 冻结的 `cohort.json` 过滤注入目标，保留全部注册用户。 |
+| `--fliter PATH` | 排除名单中的注入目标，保留全部注册用户。 |
+| `--goal` | 当前 pipeline 逐目标直接预检，默认关闭。 |
 | `--reuse` | 同名、同配置续跑；省略场景／攻击时恢复原名单，不自动重试错误缓存。 |
 | `--force-rerun` | 强制重新执行任务，与 `--reuse` 互斥；不会解除 screen 的单次筛选限制。 |
 | `--task-manifest PATH` | 核对冻结任务 ID 清单；full 不允许借此缩小注册任务集。 |
 | `--write-task-manifest PATH` | 离线导出任务 ID 清单并退出，不调用模型；目标文件必须不存在。 |
 
-`--cohort` 不能与 `--clean`、`--task-manifest` 或 `--write-task-manifest` 组合。
+`--fliter` 及 `--goal` 不适用于 clean、DoS 和清单导出。
+
+默认直接计分。传入 `--goal` 时，在应用排除表后用当前 pipeline 对每个保留目标预检一次，各攻击共享结果。续跑保留原筛选参数。历史 `--cohort` 执行入口已退役。
 
 ## 攻击选择
 
@@ -75,7 +78,7 @@ Full 与 partial 共用以下参数；可在命令后加 `--help` 查看完整�
 
 ## 按攻击并行与准备信息
 
-Full/partial/cohort 在多个可运行攻击时使用每 attack 独立进程，各进程内保持原生顺序。clean、单攻击、screen 顺序执行。父进程负责配置校验、目录锁与总报告，子进程只写自身攻击目录；无新增并发/重试参数。`--progress` 展示 GOAL 与计分进度，缓存命中也计完成，不代表有效评分或请求数。
+Full/partial 在多个可运行攻击时使用每 attack 独立进程，各进程内保持原生顺序。clean、单攻击、screen 顺序执行。父进程负责配置校验、目录锁与总报告，子进程只写自身攻击目录；无新增并发/重试参数。`--progress` 展示 GOAL 与计分进度，缓存命中也计完成，不代表有效评分或请求数。
 
 ## 显式续跑示例
 
@@ -87,7 +90,7 @@ python -m experiments.run_benchmark --reuse --name baseintent_full_01 \
   --results-dir artifacts/20261027_example/full --progress
 ```
 
-省略攻击/场景时恢复原名单。reuse 与 force-rerun 互斥，且覆盖环境强制重跑；不自动重试原生已接受的错误缓存。先核对完整模型/provider、实际后端、任务/攻击/cohort、工具元数据与有效防御配置，再写入或调用。快照保留原汇总/未完成轨迹，缓存按原生规则处理。
+省略攻击/场景时恢复原名单。reuse 与 force-rerun 互斥，且覆盖环境强制重跑；不自动重试原生已接受的错误缓存。先核对完整模型/provider、实际后端、任务/攻击/排除表/GOAL、工具元数据与有效防御配置，再写入或调用。快照保留原汇总/未完成轨迹，缓存按原生规则处理。
 
 新 CLI 路径为 `<results-dir>/<backend>/<model>_<name>/`；仅当新路径不存在才查旧布局。旧结果不移动，新命名或策略变化不自动迁移缓存。冻结名单的消费验证模型/provider、实际后端、场景、任务 ID/顺序及名单摘要，不重读筛选轨迹或重新证明筛选结论；创建/续跑筛选仍验证自己的证据。
 

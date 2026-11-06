@@ -83,6 +83,13 @@ def select_tasks(manifest,suite_name,users,injections,run_attack,is_dos,*,task_s
     return selected_users,selected_injections
 
 
+def has_unbound_cache(directory):
+    goal_dir = directory / 'goal' if (directory / 'goal_plan.json').is_file() else None
+    return (directory / 'summary.json').exists() or any(
+        goal_dir is None or not path.is_relative_to(goal_dir)
+        for pattern in ('injection_task_*.json', 'none.json') for path in directory.rglob(pattern))
+
+
 def guard_run(path,manifest):
     path=Path(path)
     if path.exists():
@@ -90,7 +97,7 @@ def guard_run(path,manifest):
             raise RunConfigurationError('run configuration changed; use a new --name (old results preserved)')
         return
     # Historical traces without a binding cannot be certified as a matching cache.
-    if path.parent.exists() and ((path.parent/'summary.json').exists() or any(path.parent.rglob('injection_task_*.json')) or any(path.parent.rglob('none.json'))):
+    if path.parent.exists() and has_unbound_cache(path.parent):
         raise ValueError('unbound historical cache; use a new --name')
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')

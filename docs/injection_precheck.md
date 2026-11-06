@@ -8,11 +8,11 @@ Screen 直接请求每个注入 GOAL，给每个目标一次完整原生轨迹�
 
 | 参数 | 简要说明 |
 | --- | --- |
-| `screen` | 创建或恢复一次 GOAL 筛选，冻结成功目标名单。 |
+| `screen` | 创建或恢复一次 GOAL 筛选，生成目标排除表。 |
 | `--suites SUITE [SUITE ...]` | 选择当前后端场景，默认全部；AgentDojo 与 AgentDyn 场景不能混选。 |
 | `--model-config PATH` | 主模型配置 TOML，缺省按环境变量／本地 `config/models.local.toml` 解析。 |
 | `--name NAME` | 必填；筛选运行名称，中断后使用相同名称和配置继续。 |
-| `--results-dir DIR` | 结果根目录，默认 `results/injection_precheck`；名单位于运行目录的 `cohort.json`。 |
+| `--results-dir DIR` | 结果根目录，默认 `results/injection_precheck`；名单位于运行目录的 `fliter.json`。 |
 | `--reuse-from PATH` | 可选；只读复用指定历史 baseline 运行中的首份兼容 GOAL 证据，不重试已失败目标。 |
 | `--help` | 查看帮助；筛选参数列表使用 `python -m experiments.run_injection_precheck screen --help`。 |
 
@@ -28,16 +28,28 @@ python -m experiments.run_injection_precheck screen --suites banking slack \
   --results-dir artifacts/20261027_screen
 ```
 
-默认分类根为 `results/injection_precheck`，新路径为 `<results-dir>/<backend>/<model>_<name>/`，实际 `cohort.json` 路径由命令输出。只读历史复用可显式加 `--reuse-from PATH`，选择第一份兼容证据，不自动重试失败。来源、模型/provider、后端、任务及筛选证据按创建协议校验，不改写原文件。
+默认分类根为 `results/injection_precheck`，新路径为 `<results-dir>/<backend>/<model>_<name>/`，实际 `fliter.json` 路径由命令输出。只读历史复用可显式加 `--reuse-from PATH`，选择第一份兼容证据，不自动重试失败。来源、模型/provider、后端、任务及筛选证据按创建协议校验，不改写原文件。
 
 <a id="2-中断和错误后续跑"></a>
 
 ## 中断和错误后续跑
 
-保留同一 screen 命令和 name 再运行，仅开始未启动目标，已完成失败/错误不重试。旧证据和冻结名单保持原字节/语义。即使有错误仍可冻结 success-only 名单，错误保留且退出码为 1；不能把跳过或连接失败算作排除成功。
+保留同一 screen 命令和 name 再运行，仅开始未启动目标，已完成失败/错误不重试。旧证据和冻结名单保持原字节/语义。即使有错误仍可生成排除表，错误保留且退出码为 1；不能把跳过或连接失败算作排除成功。
 
 ## 消费名单
 
-Full 使用 `python -m experiments.run_benchmark --cohort PATH --name NEW_NAME`；partial 使用相同选项，但只过滤原注册前缀，不补位。完整命令见[评测指南](benchmark.md)。
+Full 和 partial 使用 `--fliter PATH`。名单只包含 schema、后端和排除 ID。
 
-消费时只验证主模型 ID/provider、实际后端、所选场景、任务 ID/顺序和名单自身摘要，读取/摘要化一次。不重读筛选轨迹/manifest、不比较 GOAL 或适配器、不重新认证筛选判断。screen 创建/恢复/证据复用仍保留自身严格检查。模型/后端不兼容应拒绝，不能通过改名单或迁移旧缓存绕过。
+```json
+{
+  "schema_version": "baseintent.fliter.v1",
+  "benchmark": {
+    "id": "agentdojo",
+    "suite_version": "v1.2",
+    "revision": "pypi:agentdojo==0.1.35"
+  },
+  "excluded": {"banking": ["injection_task_0"]}
+}
+```
+
+显式传入的 GrantBind `dscg.fliter.v1` 可按相同规则读取。使用实际后端目录生成 ID 和 revision。传入 `--goal` 后，评测在应用排除表后用当前 pipeline 逐目标执行一次直接 GOAL。错误与失败分别报告，只有通过者计分。旧 cohort 和转发入口已退役。

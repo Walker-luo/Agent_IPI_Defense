@@ -10,11 +10,11 @@ python -m baseintent.benchmark_catalog
 
 | 入口 | 范围与指南 |
 | --- | --- |
-| `python -m experiments.run_benchmark` | 所选场景全部注册任务；[full/baseline/clean/cohort/reuse](../docs/benchmark.md) |
+| `python -m experiments.run_benchmark` | 所选场景全部注册任务；[full/baseline/clean/fliter/reuse](../docs/benchmark.md) |
 | `python -m experiments.run_partial_benchmark` | 每场景注册前 3 用户 × 前 3 目标；[partial](../docs/partial_benchmark.md) |
 | `python -m experiments.run_injection_precheck screen` | 每个 GOAL 一次完整轨迹，冻结成功名单；[筛选](../docs/injection_precheck.md) |
 
-默认 typical 为 ignore_previous、important_instructions、tool_knowledge。多个可运行攻击按独立进程运行，内部顺序保持；clean、单攻击和 screen 顺序执行。Full cohort 保留全部用户，partial 仅过滤原注入前缀、不补位。新 CLI 路径为 `<results-dir>/<backend>/<model>_<name>/`。
+默认 typical 为 ignore_previous、important_instructions、tool_knowledge。多个可运行攻击按独立进程运行，内部顺序保持；clean、单攻击和 screen 顺序执行。Full 保留全部用户，partial 仅过滤原注入前缀、不补位。默认直接计分，`--goal` 按目标预检并跨攻击共享。新 CLI 路径为 `<results-dir>/<backend>/<model>_<name>/`。
 
 ```text
 experiments/

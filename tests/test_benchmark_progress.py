@@ -29,25 +29,25 @@ class FakeSuite:
 
 
 class ProgressAdapterTests(TestCase):
-    def test_second_goal_failure_identifies_phase_without_changing_exception(self):
+    def test_second_scored_failure_identifies_task_without_changing_exception(self):
         suite = FakeSuite()
         calls = []
-        def preflight(_suite, _pipeline, task, *_args):
-            calls.append(task.ID)
-            if task.ID == 'i1':
-                raise TypeError('sensitive-prompt-text')
-            return True, True
 
-        with patch.object(benchmark, 'run_task_without_injection_tasks', side_effect=preflight),\
-             patch.object(benchmark, 'run_task_with_injection_tasks') as scored:
+        def score(_suite, _pipeline, task, _attack, _root, _force, targets, _version):
+            target = targets[0]
+            calls.append(target)
+            if target == 'i1':
+                raise TypeError('sensitive-prompt-text')
+            return {(task.ID, target): True}, {(task.ID, target): False}
+
+        with patch.object(benchmark, 'run_task_with_injection_tasks', side_effect=score):
             with self.assertRaises(TypeError) as caught:
                 run_suite_with_progress(None, suite, SimpleNamespace(is_dos_attack=False), None, False,
                     user_tasks=['u0'], injection_tasks=['i0', 'i1'], benchmark_version='v1.2',
                     on_step=lambda _phase: None)
         self.assertEqual(calls, ['i0', 'i1'])
-        scored.assert_not_called()
-        self.assertEqual(caught.exception._baseintent_execution_stage, 'goal_preflight')
-        self.assertEqual(caught.exception._baseintent_task_id, 'i1')
+        self.assertEqual(caught.exception._baseintent_execution_stage, 'scored_task')
+        self.assertEqual(caught.exception._baseintent_task_id, 'u0/i1')
 
     def test_readonly_native_exception_is_not_replaced_by_progress_annotation(self):
         class ReadonlyError(RuntimeError):
@@ -56,13 +56,13 @@ class ProgressAdapterTests(TestCase):
                     raise TypeError('readonly')
                 super().__setattr__(name, value)
         suite = FakeSuite()
-        with patch.object(benchmark, 'run_task_without_injection_tasks', side_effect=ReadonlyError('native')):
+        with patch.object(benchmark, 'run_task_with_injection_tasks', side_effect=ReadonlyError('native')):
             with self.assertRaises(ReadonlyError):
                 run_suite_with_progress(None, suite, SimpleNamespace(is_dos_attack=False), None, False,
                     user_tasks=['u0'], injection_tasks=['i0'], benchmark_version='v1.2',
                     on_step=lambda _phase: None)
 
-    def test_targeted_reports_preflight_then_each_scored_pair(self):
+    def test_targeted_reports_only_scored_pairs(self):
         suite = FakeSuite()
         attack = SimpleNamespace(is_dos_attack=False)
         calls = []
@@ -86,14 +86,13 @@ class ProgressAdapterTests(TestCase):
                 benchmark_version="v1.2", on_step=lambda phase: events.append(phase))
 
         self.assertEqual(calls, [
-            ("goal", "i0"), ("goal", "i1"),
             ("score", "u0", "i0"), ("score", "u0", "i1"),
             ("score", "u1", "i0"), ("score", "u1", "i1"),
         ])
-        self.assertEqual(events, ["goal", "goal", "score", "score", "score", "score"])
-        self.assertEqual(result["injection_tasks_utility_results"], {"i0": True, "i1": False})
+        self.assertEqual(events, ["score", "score", "score", "score"])
+        self.assertEqual(result["injection_tasks_utility_results"], {})
         self.assertEqual(len(result["utility_results"]), 4)
-        self.assertEqual(len(notices), 1)
+        self.assertEqual(len(notices), 0)
 
     def test_clean_counts_users_and_dos_skips_goal_preflight(self):
         suite = FakeSuite()
@@ -193,10 +192,10 @@ class InstalledNativeProgressParityTests(TestCase):
             native_dir, progress_dir = Path(root) / 'native', Path(root) / 'progress'
             native, native_calls, _ = run(native_dir, False)
             shown, shown_calls, events = run(progress_dir, True)
-            for field in ('utility_results', 'security_results', 'injection_tasks_utility_results'):
+            for field in ('utility_results', 'security_results'):
                 self.assertEqual(native[field], shown[field])
-            self.assertEqual(native_calls, shown_calls)
-            self.assertEqual(events, ['goal'] * len(targets) + ['score'] * len(targets))
+            self.assertEqual(native_calls[len(targets):], shown_calls)
+            self.assertEqual(events, ['score'] * len(targets))
             cached, cached_calls, cached_events = run(progress_dir, True)
             self.assertEqual(cached_calls, [])
             self.assertEqual(cached_events, events)

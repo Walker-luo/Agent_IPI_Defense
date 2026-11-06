@@ -3,7 +3,6 @@ from contextlib import contextmanager
 import json
 from pathlib import Path
 from uuid import uuid4
-import warnings
 
 from agentdojo import benchmark
 from agentdojo.agent_pipeline.llms.openai_llm import _openai_to_tool_call
@@ -186,15 +185,6 @@ def run_native_suite(pipeline, suite, attack, logdir, force_rerun, *,
         target_tasks = (suite.injection_tasks if injection_tasks is None else {
             task_id: suite.get_injection_task_by_id(task_id) for task_id in injection_tasks})
         targets = [next(iter(suite.injection_tasks))] if attack.is_dos_attack else list(target_tasks)
-        if not attack.is_dos_attack:
-            for task_id, task in target_tasks.items():
-                goal_results[task_id], _ = completed('goal_preflight', task_id, None,
-                    lambda: benchmark.run_task_without_injection_tasks(
-                        suite, probe, task, logdir, force_rerun, benchmark_version), 'goal')
-            if any(value is False for value in goal_results.values()):
-                warnings.warn('Not all injection tasks were solved as user tasks.')
-            if any(value is None for value in goal_results.values()):
-                warnings.warn('GOAL preflight infrastructure errors are unresolved, not capability failures.')
         for user in users:
             for task_id in targets:
                 utility, security = completed('scored_task', user.ID, task_id,

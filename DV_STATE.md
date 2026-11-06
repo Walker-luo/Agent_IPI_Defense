@@ -61,6 +61,12 @@
 - 已实现：整体测试数据按攻击名称分组，再按结果名称自然排序；版本中的数字按数值排序，数据及原结果身份不变。
 - 已验证：Node `tests/*.cjs` 54 项通过，两环境 `test_dashboard*.py` 各 50 项通过。未运行完整回归或在线评测；模型调用为 0。见 `artifacts/20261028_history_attack_order/`。
 
+## 评测流程迁移（2026-11-06）
+
+- 基线提交 `b149cae`。已实现 full／partial 的 `--fliter` 和默认关闭的 `--goal`，screen 生成排除表，旧 cohort 执行入口退役。目标过滤、一次 GOAL、续跑绑定、原生计分和成本分开记录。
+- AgentDojo 真实 Qwen3.7-Flash 验收 12 次有效计分、9 个不同案例，另有 1 个 GOAL 通过。计分 93 次调用／161662 Token，GOAL 8 次调用／14275 Token。首次沙箱连接错误独立保留，未纳入有效案例。
+- 定向验证及基线已知失败见 `artifacts/20261106_fliter_goal/verification.md`。用户更新范围后仅验证 AgentDojo。旧的目标型隐式 GOAL 结果使用新名称重新开始新实验，历史证据按原身份读取。
+
 ## 当前实现
 
 L1来源视图和有限银行投影；L2两次调用、无损准备归并、冻结全局工具与固定ID键进度关联；宿主事件／语义进度；L3有限四字段审计；Monitor整批回执与一次性票据。详细行为和限制以 [框架](docs/reference/framework.md) 为准。

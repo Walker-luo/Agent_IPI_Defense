@@ -1,4 +1,4 @@
-"""Shared frozen-cohort evidence and measurement; no independent model loop."""
+"""Frozen cohort compatibility and screening evidence helpers."""
 import fcntl
 import hashlib
 import json
@@ -9,17 +9,8 @@ from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 
-from agentdojo.attacks.attack_registry import ATTACKS
-from baseintent.benchmark_catalog import get_suite, benchmark_identity, validate_backend, get_backend, get_suites, same_backend
-from baseintent.model_config import resolve_model_config
-from baseintent.intent_evidence import audit_model_settings
-from baseintent.audit_router import DEFAULT_THRESHOLD, validate_router_options, POLICY_VERSION
-from baseintent.paths import BENCHMARK_RESULTS_DIR, RESULTS_DIR
-from experiments import run_partial_benchmark as shared
-from experiments.common.partial_controls import source_revision, guard_run, validate_controls
-from experiments.common.benchmark_reuse import ReusePlan
-from experiments.common.result_paths import resolve_run_path
-from experiments.common.benchmark_execution import PreparedBindings
+from baseintent.benchmark_catalog import get_suite, benchmark_identity, get_backend, same_backend
+from experiments.common.partial_controls import source_revision
 
 SCHEMA = 'baseintent.injection-screen.v2'
 LEGACY_RULE = 'keep-any-valid-success; exclude-after-two-valid-failures; errors-unresolved'
@@ -306,108 +297,5 @@ def _preflight_report(base, cohort, active, attacks, selected_tasks=None):
     })
 
 
-def run_screened(cohort_path, *, config_path=None, run_name=None, results_dir=None, origin=False,
-                 attack=None, audit_router_mode='off', trace_level='summary', audit_router_artifact=None, audit_router_threshold=DEFAULT_THRESHOLD,
-                 force_rerun=False, reuse=False, progress=False, model_id=None, sec_model_id=None, defense=None, suites=None,
-                 task_scope='screened', **controls):
-    audit_router_threshold = validate_router_options(audit_router_threshold, audit_router_artifact)
-    backend = get_backend()
-    if task_scope not in {'screened', 'partial_screened'}:
-        raise ValueError('unknown screened task scope')
-    partial = task_scope == 'partial_screened'
-    if not run_name:
-        raise ValueError('screened measurements require a new --name')
-    if reuse and force_rerun:
-        raise ValueError('--reuse cannot combine with force_rerun')
-    config = resolve_model_config(model_id, config_path=config_path,
-        **{k: controls.pop(k) for k in ('api_key', 'base_url', 'provider', 'api_key_env') if k in controls})
-    cohort_path = Path(cohort_path).resolve()
-    cohort = _read(cohort_path)
-    root = Path(results_dir) if results_dir else RESULTS_DIR / 'partial_benchmark' if partial else BENCHMARK_RESULTS_DIR
-    base = resolve_run_path(root, backend.id, config.model_id, run_name, allow_legacy=reuse)
-    resume = None
-    if reuse:
-        resume = ReusePlan(base, suites=suites, attack=attack, run_attack=True, task_scope=task_scope,
-                           resolve_attacks=shared.resolve_attack_names)
-        suites, attack = resume.suites, resume.attacks
-    requested = list(suites) if suites is not None else None
-    _validate_cohort_data(cohort, config, suites=requested)
-    requested = requested if requested is not None else list(cohort['suites'])
-    names = shared.resolve_attack_names(attack if attack is not None else 'typical')
-    if any(ATTACKS[name].is_dos_attack for name in names):
-        raise ValueError('DoS is not supported by injection-goal screening; select targeted attacks')
-    use_checker = controls.get('use_security_checker', True)
-    use_sandbox = controls.get('use_sandbox', True)
-    shared._validate_router_controls(origin, use_checker, audit_router_mode, use_sandbox)
-    shared._validate_prompt_profile(origin, use_sandbox, use_checker, controls.get('prompt_profile', 'legacy'))
-    validate_controls(origin=origin, use_security_checker=use_checker,
-                      audit_retries=controls.get('audit_retries', 0), completion_prompt=controls.get('completion_prompt', False))
-    security_model = None
-    if not origin and use_checker:
-        security_config = resolve_model_config(sec_model_id, config_path=config_path, prefix='BASEINTENT_SEC', fallback=config,
-            **{k: controls['sec_' + k] for k in ('api_key', 'base_url', 'provider', 'api_key_env') if 'sec_' + k in controls})
-        security_model = audit_model_settings(security_config, controls.get('prompt_profile', 'legacy'))
-    selected, catalog_sizes = {}, {}
-    for name in requested:
-        entry = cohort['suites'][name]
-        suite = get_suite('v1.2', name)
-        catalog_sizes[name] = len(suite.injection_tasks)
-        injections = [i for i in list(suite.injection_tasks)[:3] if i in entry['injection_task_ids']] if partial else entry['injection_task_ids']
-        selected[name] = {'user_task_ids': entry['user_task_ids'][:3] if partial else entry['user_task_ids'],
-                          'injection_task_ids': injections}
-    active = [name for name, entry in selected.items() if entry['injection_task_ids']]
-    if not active:
-        raise ValueError('no injection targets remain in the requested task scope; benchmark not started')
-    prepared = resume if resume is not None else PreparedBindings()
-    with _lock(base):
-        effective = {k: controls.get(k, default) for k, default in {
-            'use_sandbox': True, 'use_security_checker': True, 'planning_tool_view': True,
-            'delegated_tasks': True, 'l1_projection_mode': 'projected', 'audit_retries': 0,
-            'completion_prompt': False}.items()}
-        from baseintent.prompt_profiles import profile_binding
-        identity = {**profile_binding(controls.get('prompt_profile', 'legacy')),
-                    'schema_version': 'baseintent.screened-run.v2', 'benchmark': benchmark_identity(), 'task_scope': task_scope, 'requested_suites': requested, 'selected_tasks': selected,
-                    'cohort_sha256': cohort['cohort_sha256'], 'main_model': config.public_dict(), 'security_model': security_model,
-                    'baseline': origin, 'attacks': names, 'audit_router_mode': audit_router_mode,
-                    **({'audit_router_threshold': audit_router_threshold, 'audit_router_policy_version': POLICY_VERSION}
-                       if audit_router_mode != 'off' else {}),
-                    'trace_level': trace_level, 'controls': effective, 'defense': defense,
-                    'tool_metadata_path': str(controls['tool_metadata_path']) if controls.get('tool_metadata_path') else None,
-                    'audit_router_artifact_sha256': _file_hash(audit_router_artifact) if audit_router_artifact else None,
-                    'source': source_revision()}
-        # Refuse to relabel existing ordinary runs as screened cohorts.
-        if not (base / 'screened_run_manifest.json').exists() and any(base.glob('*/*/run_manifest.json')):
-            raise ValueError('existing non-screened run; use a new --name')
-        prepared.check(base / 'screened_run_manifest.json', identity)
-        attachment = {'schema_version': 'baseintent.screened-cohort.v2', 'benchmark': benchmark_identity(), 'scope': 'capability-conditioned screened subset', 'task_scope': task_scope,
-                      'cohort_validation': dict(COHORT_VALIDATION),
-                      'cohort_path': str(cohort_path), 'cohort': cohort,
-                      'selected_tasks': selected, 'requested_suites': requested,
-                      'omitted_suites': [name for name in cohort['suites'] if name not in requested],
-                      'skipped_suites': [name for name in selected if name not in active],
-                      'counts': {name: {'original_targets': catalog_sizes[name],
-                          'retained_targets': len(cohort['suites'][name]['injection_task_ids']),
-                          'prefix_targets': min(3, catalog_sizes[name]) if partial else catalog_sizes[name],
-                          'selected_targets': len(entry['injection_task_ids']), 'user_tasks': len(entry['user_task_ids']),
-                          'planned_per_targeted_attack': len(entry['user_task_ids']) * len(entry['injection_task_ids'])}
-                          for name, entry in selected.items()},
-                      'cost_scope': 'native per-attack preflight retained; not scored attack samples; screening cost separate'}
-        attachment_path = base / 'screened_cohort.json'
-        if not attachment_path.exists() and resume is None:
-            prepared.check(attachment_path, attachment)
-        for name in attachment['skipped_suites']:
-            print(f'{name}: {"原前3个注入目标中" if partial else ""}无通过目标，明确跳过。')
-        try:
-            return shared.main(model_id=config.model_id, sec_model_id=sec_model_id, defense=defense,
-                               provider=config.provider, base_url=config.base_url,
-                               api_key_env=config.api_key_env, api_key=config.api_key, config_path=config_path,
-                               suites=active, origin=origin, run_name=run_name, results_dir=root,
-                               task_manifest_path=cohort_path, task_scope=task_scope, attack=names,
-                               cohort_sha256=cohort['cohort_sha256'],
-                               _validated_cohort=cohort,
-                               audit_router_mode=audit_router_mode, trace_level=trace_level,
-                               audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold, force_rerun=force_rerun,
-                               reuse=reuse, progress=progress, _reuse_plan=prepared, **controls)
-        finally:
-            if prepared.committed:
-                _preflight_report(base, cohort, active, names, selected)
+def run_screened(cohort_path, **options):
+    raise ValueError('cohort execution is retired; use --fliter')

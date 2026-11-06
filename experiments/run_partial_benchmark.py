@@ -30,13 +30,14 @@ from experiments.common.partial_reporting import collect_suite_report, write_run
 from experiments.common.partial_controls import (validate_controls, make_task_manifest, load_task_manifest,
                                           select_tasks, guard_run, source_revision, preserve_cached_cost,
                                           RunConfigurationError)
-from experiments.common.benchmark_reuse import ReusePlan, execution_plan
+from experiments.common.benchmark_reuse import ReusePlan, execution_plan, configuration
 from experiments.common.result_paths import (
     safe_result_component as _safe_result_component, run_component, resolve_run_path, result_layout,
 )
 from experiments.common.benchmark_execution import (
     PreparedBindings, ApprovedBindings, run_lock,
 )
+from experiments.common.injection_filter import load_fliter, filter_digest, excluded_ids
 from experiments.common.attack_execution import iter_attack_results, AttackOutput
 from experiments.common.benchmark_progress import GroupProgress, run_suite_with_progress
 from experiments.common.error_diagnostics import execution_error_diagnostics
@@ -195,6 +196,8 @@ def main(
     use_sandbox: bool = True,
     cohort_sha256: str | None = None,
     cohort_path: str | Path | None = None,
+    fliter_path: str | Path | None = None,
+    goal: bool = False,
     _reuse_plan=None,
     _validated_cohort=None,
 ) -> int:
@@ -205,24 +208,12 @@ def main(
         raise ValueError('--reuse requires --name and cannot combine with force_rerun')
     if suites is None and not reuse:
         suites = list(backend.suites)
-    if cohort_path is not None:
-        if task_scope != 'partial' or not run_attack or task_manifest_path or cohort_sha256:
-            raise ValueError('partial --cohort requires attacks and cannot use another manifest or scope')
-        from experiments.common.injection_cohort import run_screened
-        return run_screened(
-            cohort_path, task_scope='partial_screened', suites=suites, model_id=model_id,
-            sec_model_id=sec_model_id, origin=origin, defense=defense, config_path=config_path,
-            run_name=run_name, results_dir=results_dir, attack=attack, force_rerun=force_rerun, reuse=reuse,
-            progress=progress,
-            api_key=api_key, base_url=base_url, provider=provider, api_key_env=api_key_env,
-            sec_api_key=sec_api_key, sec_base_url=sec_base_url, sec_provider=sec_provider,
-            sec_api_key_env=sec_api_key_env, trace_level=trace_level, tool_metadata_path=tool_metadata_path,
-            use_security_checker=use_security_checker, use_sandbox=use_sandbox,
-            audit_retries=audit_retries, completion_prompt=completion_prompt,
-            audit_router_mode=audit_router_mode, audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold,
-            planning_tool_view=planning_tool_view, delegated_tasks=delegated_tasks,
-            l1_projection_mode=l1_projection_mode, prompt_profile=prompt_profile,
-        )
+    if (cohort_path is not None or cohort_sha256 is not None or _validated_cohort is not None
+            or task_scope not in {'partial', 'full'}):
+        raise ValueError('cohort execution is retired; use --fliter')
+    if not run_attack and (fliter_path is not None or goal):
+        raise ValueError('clean does not accept --fliter or --goal')
+    fliter = load_fliter(fliter_path) if fliter_path is not None else None
     logdir = Path(results_dir) if results_dir is not None else BENCHMARK_RESULTS_DIR if task_scope in {'full', 'screened'} else RESULTS_DIR / "partial_benchmark"
     resume = _reuse_plan
     if reuse and resume is None:
@@ -247,14 +238,8 @@ def main(
     validate_controls(origin=origin, use_security_checker=use_security_checker,
                       audit_retries=audit_retries, completion_prompt=completion_prompt)
     frozen_tasks = _validated_cohort if _validated_cohort is not None else load_task_manifest(task_manifest_path)
-    if task_scope in {'screened', 'partial_screened'}:
-        from experiments.common.injection_cohort import _digest, COHORT_VALIDATION
-        if (not frozen_tasks or not cohort_sha256 or frozen_tasks.get('cohort_sha256') != cohort_sha256
-                or (_validated_cohort is None and
-                    _digest({k: v for k, v in frozen_tasks.items() if k != 'cohort_sha256'}) != cohort_sha256)):
-            raise ValueError('screened measurement requires the validated frozen cohort identity')
-    elif _validated_cohort is not None:
-        raise ValueError('validated cohort is reserved for screened measurements')
+    if frozen_tasks and ('cohort_sha256' in frozen_tasks or 'injection-screen' in frozen_tasks.get('schema_version', '')):
+        raise ValueError('cohort execution is retired; use --fliter')
     if task_scope in {'full', 'screened', 'partial_screened'} and frozen_tasks is not None:
         # Validate the full catalogue before model/client construction. DoS later
         # projects this complete catalogue to its native first-injection rule.
@@ -263,17 +248,25 @@ def main(
             select_tasks(frozen_tasks, suite_name, list(suite.user_tasks), list(suite.injection_tasks),
                          run_attack, False, task_scope=task_scope)
     attack_names = resolve_attack_names(attack if attack is not None else 'typical') if run_attack else ["none"]
-    if task_scope in {'screened', 'partial_screened'} and any(ATTACKS[name].is_dos_attack for name in attack_names):
-        raise ValueError('screened measurements do not support DoS')
-    context = {'execution_plan': execution_plan(task_scope, suites, attack_names, cohort_sha256)}
-    if task_scope in {'screened', 'partial_screened'}:
-        context['cohort_validation'] = dict(COHORT_VALIDATION)
+    targeted = run_attack and any(not ATTACKS[name].is_dos_attack for name in attack_names)
+    if (fliter is not None or goal) and any(ATTACKS[name].is_dos_attack for name in attack_names):
+        raise ValueError('DoS does not accept --fliter or --goal')
+    context = {'execution_plan': execution_plan(task_scope, suites, attack_names)}
+    if targeted:
+        context['execution_plan'].update(schema_version='baseintent.benchmark-plan.v3',
+            goal=goal, fliter_sha256=filter_digest(fliter) if fliter else None)
     run_records = []
     print(f"本次攻击 ({len(attack_names) if run_attack else 0}): {', '.join(attack_names) if run_attack else '无（clean）'}", flush=True)
     print(f"本次场景 ({len(suites)}): {', '.join(suites)}", flush=True)
 
     prepared = resume if resume is not None else PreparedBindings()
-    resources = {'task_manifest': frozen_tasks}
+    if task_scope == 'partial' and frozen_tasks and (fliter is not None or goal):
+        for suite_name in suites:
+            suite = get_suite(SUITE_VERSION, suite_name)
+            users, targets = list(suite.user_tasks), list(suite.injection_tasks)
+            if select_tasks(frozen_tasks, suite_name, users, targets, True, False) != (users[:3], targets[:3]):
+                raise ValueError('filtered partial runs require the registered three-by-three prefix')
+    resources = {'task_manifest': frozen_tasks, 'fliter': fliter}
     def group_options(attack_name):
         return dict(
                 model_id=model_id, sec_model_id=sec_model_id, suites=suites, run_attack=run_attack, origin=origin, defense=defense,
@@ -295,6 +288,8 @@ def main(
                 run_base=resume.base if isinstance(resume, ReusePlan) else None,
 
         )
+    if goal:
+        resources['candidate_bindings'] = {}
     try:
         for attack_name in attack_names:
             _run_single_attack(**group_options(attack_name), report_context=context,
@@ -311,6 +306,42 @@ def main(
         if selection.get('warning'):
             print(f"工具分类目录提示: {selection['warning']}", flush=True)
     with run_lock(base):
+        from experiments.run_injection_precheck import run_measurement_goals
+        from experiments.common.injection_cohort import _replace
+        checks = []
+        if not goal and (base / 'goal_plan.json').exists():
+            raise RunConfigurationError('run requires the original --goal option')
+        if goal:
+            candidates = resources.pop('candidate_bindings')
+            if not (base / 'goal_plan.json').exists() and (
+                    (base / 'benchmark_plan.json').exists() or (base / 'goal').exists()
+                    or any(base.glob('*/*/run_manifest.json'))):
+                raise RunConfigurationError('legacy or unbound run; use a new --name')
+            if (base / 'goal_plan.json').exists() and not reuse:
+                raise RunConfigurationError('GOAL run already started; use --reuse')
+            binding = {**context['execution_plan'],
+                       'groups': {str(path.relative_to(base)): configuration(value)
+                                  for path, value in candidates.items()}}
+            selections = {path.parent.name: value['task_selection']
+                          for path, value in candidates.items() if path.name == 'run_manifest.json'}
+            from hashlib import sha256
+            binding['goal_sha256'] = {
+                name: {task_id: sha256(suite.get_injection_task_by_id(task_id).GOAL.encode()).hexdigest()
+                       for task_id in selections[name]['injections']}
+                for name in selections for suite in (get_suite(SUITE_VERSION, name),)}
+            guard_run(base / 'goal_plan.json', binding)
+            try:
+                checks = run_measurement_goals(base, selections, binding,
+                    lambda: _configured_pipeline(group_options(attack_names[0]), resources['metadata'][1]),
+                    progress=progress)
+            except KeyboardInterrupt:
+                return 130
+            resources['goal_retained'] = {(c['suite'], c['injection_task_id']) for c in checks if c['status'] == 'pass'}
+            for attack_name in attack_names:
+                _run_single_attack(**group_options(attack_name), report_context=context,
+                                   reuse_plan=prepared, prepare_only=True, resource_cache=resources)
+        selection_report = {'goal_checks': checks, 'goal_enabled': goal,
+                            'groups': list(resources.get('selections', {}).values())}
         try:
             if not set(base.glob('*/*/run_manifest.json')) <= prepared.checked.keys():
                 raise RunConfigurationError('existing task bindings fall outside the complete requested plan')
@@ -318,6 +349,12 @@ def main(
         except RunConfigurationError as exc:
             print(f'❌ 配置绑定冲突: {exc}', flush=True)
             return 1
+        if targeted:
+            selection_report['goal_cost'] = {
+                'whole_run': _goal_cost(checks),
+                'invocation': _goal_cost([c for c in checks if not c['cached']]),
+            }
+            _replace(base / 'summary.json', {'selection_report': selection_report})
         approved = ApprovedBindings(prepared)
         jobs = [{'attack': name, 'suite': suite,
                  'options': group_options(name), 'bindings': approved,
@@ -408,13 +445,27 @@ def main(
         overview_path, failures_path = write_run_overview(
             base, attack_names, suites, run_records, context.get("suite_reports", []),
             model_id=context.get("model_id", model_id), task_scope=task_scope, routing_summary=routing_summary,
+            selection_report=selection_report if targeted else None,
         )
         print(f"📝 紧凑摘要: {overview_path}")
         print(f"🔎 失败片段: {failures_path}")
         print(f"📋 攻击执行清单: {manifest_path}")
-        return 1 if (not any(r['status'] == 'completed' for r in group_results) or
+        return 1 if (any(c['status'] == 'error' for c in checks)
+                     or not (any(r['status'] == 'completed' for r in group_results) or
+                             all(r.get('reason_code') == 'NO_ELIGIBLE_TARGETS' for r in group_results)) or
                      any(record["status"] == "error" for record in run_records) or
                      any(report.get("task_errors") or report.get("goal_preflight_errors") for report in context.get("suite_reports", []))) else 0
+
+
+def _goal_cost(checks):
+    phases = [phase for check in checks
+              for model in (check.get('api_accounting') or {}).get('models', [])
+              for phase in model.values()]
+    return {'known_tokens': sum(p.get('total_tokens', 0) for p in phases),
+            'api_calls': sum(p.get('api_calls', 0) for p in phases),
+            'failed_calls': sum(p.get('failed_calls', 0) for p in phases),
+            'missing_usage_calls': sum(p.get('missing_usage_calls', 0) for p in phases),
+            'unknown_usage': sum(c.get('total_tokens') is None for c in checks)}
 
 
 def _execute_group(job):
@@ -422,6 +473,69 @@ def _execute_group(job):
     _run_single_attack(**job['options'], only_suite=job['suite'], group_mode=True,
                        reuse_plan=job['bindings'], report_context=context, resource_cache=job.get('resources'))
     return {'suite_reports': context.get('suite_reports', [])}
+
+
+def _configured_pipeline(options, tool_metadata):
+    origin = options['origin']
+    defense = options['defense']
+    model_id = options['model_id']
+    sec_model_id = options['sec_model_id']
+    api_key = options['api_key']
+    base_url = options['base_url']
+    provider = options['provider']
+    api_key_env = options['api_key_env']
+    sec_api_key = options['sec_api_key']
+    sec_base_url = options['sec_base_url']
+    sec_provider = options['sec_provider']
+    sec_api_key_env = options['sec_api_key_env']
+    config_path = options['config_path']
+    trace_level = options['trace_level']
+    use_security_checker = options['use_security_checker']
+    use_sandbox = options['use_sandbox']
+    audit_retries = options['audit_retries']
+    completion_prompt = options['completion_prompt']
+    audit_router_mode = options['audit_router_mode']
+    audit_router_artifact = options['audit_router_artifact']
+    audit_router_threshold = options['audit_router_threshold']
+    planning_tool_view = options['planning_tool_view']
+    delegated_tasks = options['delegated_tasks']
+    l1_projection_mode = options['l1_projection_mode']
+    prompt_profile = options['prompt_profile']
+    sec_tracker = None
+    if origin:
+        pipeline, main_tracker = make_openai_compatible_pipeline(
+            model_id,
+            ad_defense=defense,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+            api_key_env=api_key_env,
+            config_path=config_path,
+        )
+
+    else:
+        pipeline, main_tracker, sec_tracker = make_defended_pipeline(
+            model_id,
+            sec_model_id,
+            api_key=api_key,
+            base_url=base_url,
+            provider=provider,
+            api_key_env=api_key_env,
+            sec_api_key=sec_api_key,
+            sec_base_url=sec_base_url,
+            sec_provider=sec_provider,
+            sec_api_key_env=sec_api_key_env,
+            config_path=config_path,
+            trace_level=trace_level,
+            tool_metadata=tool_metadata,
+            use_security_checker=use_security_checker,
+            use_sandbox=use_sandbox,
+            audit_retries=audit_retries, completion_prompt=completion_prompt,
+            audit_router_mode=audit_router_mode,audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold,
+            planning_tool_view=planning_tool_view, delegated_tasks=delegated_tasks,
+            l1_projection_mode=l1_projection_mode, prompt_profile=prompt_profile,
+        )
+    return pipeline, main_tracker, sec_tracker
 
 
 def _run_single_attack(
@@ -537,41 +651,7 @@ def _run_single_attack(
                     completion_prompt=completion_prompt, prompt_profile=prompt_profile)
             pipeline = copy(resource_cache['descriptor'])
         else:
-            sec_tracker = None
-            if origin:
-                pipeline, main_tracker = make_openai_compatible_pipeline(
-                    model_id,
-                    ad_defense=defense,
-                    api_key=api_key,
-                    base_url=base_url,
-                    provider=provider,
-                    api_key_env=api_key_env,
-                    config_path=config_path,
-                )
-
-            else:
-                pipeline, main_tracker, sec_tracker = make_defended_pipeline(
-                    model_id,
-                    sec_model_id,
-                    api_key=api_key,
-                    base_url=base_url,
-                    provider=provider,
-                    api_key_env=api_key_env,
-                    sec_api_key=sec_api_key,
-                    sec_base_url=sec_base_url,
-                    sec_provider=sec_provider,
-                    sec_api_key_env=sec_api_key_env,
-                    config_path=config_path,
-                    trace_level=trace_level,
-                    tool_metadata=tool_metadata,
-                    use_security_checker=use_security_checker,
-                    use_sandbox=use_sandbox,
-                    audit_retries=audit_retries, completion_prompt=completion_prompt,
-                    audit_router_mode=audit_router_mode,audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold,
-                    planning_tool_view=planning_tool_view, delegated_tasks=delegated_tasks,
-                    l1_projection_mode=l1_projection_mode, prompt_profile=prompt_profile,
-                )
-
+            pipeline, main_tracker, sec_tracker = _configured_pipeline(locals(), tool_metadata)
 
         main_model_config = getattr(pipeline, "baseintent_model_config", {})
         sec_model_config = getattr(pipeline, "baseintent_security_model_config", {})
@@ -584,6 +664,9 @@ def _run_single_attack(
         result_dir_name = base_output_dir.name
         pipeline.name = result_dir_name
         def bind(path, expected):
+            if resource_cache is not None and 'candidate_bindings' in resource_cache:
+                resource_cache['candidate_bindings'][path] = expected
+                return expected
             if reuse_plan is not None:
                 return reuse_plan.check(path, expected) if prepare_only else reuse_plan.guard(path, expected)
             guard_run(path, expected)
@@ -620,6 +703,22 @@ def _run_single_attack(
             frozen_tasks, suite_name, user_task_ids, injection_task_ids, run_attack, is_dos_attack,
             task_scope=task_scope,
         )
+        if resource_cache is not None and run_attack and not is_dos_attack:
+            before = list(selected_injections)
+            fliter = resource_cache.get('fliter')
+            excluded = set(excluded_ids(fliter, suite_name)) if fliter else set()
+            selected_injections = [i for i in before if i not in excluded]
+            after_fliter = list(selected_injections)
+            retained = resource_cache.get('goal_retained')
+            if retained is not None:
+                selected_injections = [i for i in selected_injections if (suite_name, i) in retained]
+            if prepare_only:
+                resource_cache.setdefault('selections', {})[(attack_name, suite_name)] = {
+                    'attack': attack_name, 'suite': suite_name, 'users': selected_users,
+                    'before': before, 'fliter_excluded': [i for i in before if i in excluded],
+                    'goal_excluded': [i for i in after_fliter if i not in selected_injections],
+                    'retained': selected_injections,
+                    'removed_pairs': len(selected_users) * (len(before) - len(selected_injections))}
         run_binding = {
             "schema_version": f"baseintent.{task_scope}-run.v2",
             "benchmark": benchmark_identity(),
@@ -663,6 +762,12 @@ def _run_single_attack(
         if prepare_only:
             if resource_cache is not None:
                 compatibility = resource_cache.setdefault('compatibility', {})
+                if run_attack and not is_dos_attack and not selected_injections:
+                    compatibility[(attack_name, suite_name)] = {'status': 'unsupported',
+                        'reason_code': 'NO_ELIGIBLE_TARGETS', 'planned_pairs': 0}
+                    continue
+                if 'candidate_bindings' in resource_cache:
+                    continue
                 try:
                     issue = check_attack_compatibility(
                         suite, attack_name if run_attack and not is_dos_attack else 'none',
@@ -684,7 +789,7 @@ def _run_single_attack(
             with logging.OutputLogger(str(base_output_dir)):
                 if progress:
                     with GroupProgress(f"{attack_name if run_attack else 'none'}/{suite_name}",
-                                       goal_total=len(selected_injections) if run_attack and not is_dos_attack else 0,
+                                       goal_total=0,
                                        score_total=planned_task_count) as display:
                         results = run_suite_with_progress(
                             pipeline, suite, attack, base_output_dir, force_rerun,
@@ -916,9 +1021,9 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
     parser.add_argument("--clean", action="store_true", help="用相同用户任务运行无攻击效用控制。")
     parser.add_argument("--task-manifest", dest="task_manifest_path", help="读取冻结 v1.2 全量任务清单；拒绝缩小实际执行集合。" if full else "读取冻结 v1.2 任务 ID 清单。")
     parser.add_argument("--write-task-manifest", metavar="PATH", help="离线导出当前任务 ID 清单并退出，不调用模型。")
-    parser.add_argument('--cohort', dest='cohort_path', help=(
-        '冻结的 injection 预检名单；显式标为 screened，保留全部用户任务。' if full else
-        '冻结的 injection 预检名单；保留每场景前3个用户，仅过滤原来前3个注入目标，不补位。'))
+    parser.add_argument('--cohort', help=argparse.SUPPRESS)
+    parser.add_argument('--fliter', dest='fliter_path', help='注入目标排除表。')
+    parser.add_argument('--goal', action='store_true', help='用当前 pipeline 对保留目标逐一预检。')
     args = parser.parse_args(argv)
     if args.audit_router_mode is None:
         args.audit_router_mode = 'off' if args.baseline or args.no_checker else 'shadow'
@@ -938,13 +1043,10 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
         parser.error('--suites cannot contain duplicate names')
     if args.reuse and (not args.run_name or args.write_task_manifest):
         parser.error('--reuse requires --name and cannot combine with --write-task-manifest')
-    cohort_path = getattr(args, 'cohort_path', None)
-    if (require_cohort or cohort_path is not None) and not cohort_path:
-        parser.error('screened benchmark requires a nonempty --cohort PATH')
-    if cohort_path and (args.clean or args.task_manifest_path or args.write_task_manifest):
-        parser.error('--cohort cannot be combined with --clean, --task-manifest, or --write-task-manifest')
-    if cohort_path and not args.run_name:
-        parser.error('--cohort requires a new --name')
+    if require_cohort or args.cohort is not None:
+        parser.error('cohort execution is retired; use --fliter')
+    if (args.fliter_path is not None or args.goal) and (args.clean or args.write_task_manifest):
+        parser.error('clean and task manifest export do not accept --fliter or --goal')
     try:
         validate_controls(origin=args.baseline, use_security_checker=not args.no_checker,
                           audit_retries=args.audit_retries, completion_prompt=args.completion_prompt)
@@ -971,11 +1073,7 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
     try:
         execution = entrypoint or main
         dispatch_options = {} if entrypoint is not None else {'task_scope': task_scope}
-        if cohort_path is not None:
-            if full and entrypoint is None:
-                from experiments.run_benchmark import main as execution
-                dispatch_options.pop('task_scope', None)
-            dispatch_options['cohort_path'] = cohort_path
+        dispatch_options.update(fliter_path=args.fliter_path, goal=args.goal)
         status = execution(
             model_id=getenv("BASEINTENT_MAIN_MODEL_ID"),
             sec_model_id=getenv("BASEINTENT_SEC_MODEL_ID"),

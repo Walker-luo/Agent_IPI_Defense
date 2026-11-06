@@ -10,10 +10,10 @@
 | `--attack NAME [NAME ...]` | 选择攻击，默认 `typical`（ignore_previous、important_instructions、tool_knowledge）；可用 `all`。 |
 | `--baseline` / `--clean` | 分别选择原生无防御 Agent／无攻击控制；可以组合。 |
 | `--model-config PATH` | 模型配置 TOML，缺省按环境变量／本地 `config/models.local.toml` 解析。 |
-| `--name NAME` | 输出运行名称；新实验使用新名称，cohort 和 reuse 必填。 |
+| `--name NAME` | 输出运行名称；新实验使用新名称，reuse 必填。 |
 | `--results-dir DIR` | 结果根目录，默认 `results/partial_benchmark`。 |
 | `--progress` | 显示 GOAL 与计分进度。 |
-| `--cohort PATH` | 按冻结名单过滤原前 3 注入目标，不补位，保留前 3 用户。 |
+| `--fliter PATH` | 按排除表过滤原前 3 注入目标，不补位，保留前 3 用户。 |
 | `--task-manifest PATH` | 使用冻结的 partial 任务 ID 清单。 |
 | `--write-task-manifest PATH` | 离线导出当前 partial 清单并退出；目标文件必须不存在。 |
 | `--reuse` / `--force-rerun` | 同名同配置续跑／强制重新执行，二者互斥。 |
@@ -21,7 +21,7 @@
 | `--trace-level summary|standard|full` | 默认 `summary`（可由环境变量覆盖）；需要更多诊断时用 standard/full。 |
 | `--no-checker` | 关闭语义动作审计，保留 L2／进度和执行监控。 |
 
-`--cohort` 不能与 `--clean`、`--task-manifest` 或清单导出组合。审计路由、profile、工具目录等其余共享选项见[公共防御参数](benchmark.md#可选控制与日志)。完整列表可运行 `python -m experiments.run_partial_benchmark --help`。
+`--fliter` 和 `--goal` 不适用于 clean、DoS 和清单导出。审计路由、profile、工具目录等其余共享选项见[公共防御参数](benchmark.md#可选控制与日志)。完整列表可运行 `python -m experiments.run_partial_benchmark --help`。
 
 ## 对照与输出
 
@@ -39,7 +39,7 @@ python -m experiments.run_partial_benchmark --suites banking slack \
   --results-dir artifacts/20261027_example/partial --progress
 ```
 
-clean 用 `--clean`，原生 clean 再加 `--baseline`。冻结目标用 `--cohort PATH`，只过滤原前 3 目标，不补位，标记 `partial_screened`；保留前三用户。Full cohort 则保留全部注册用户，两种范围不能合并。
+clean 用 `--clean`，原生 clean 再加 `--baseline`。使用 `--fliter PATH` 从原前 3 个注入目标中删除名单项，不补位。默认直接计分。加 `--goal` 可对剩余目标预检，各攻击共享判定，只有通过者参与计分。
 
 共享参数、攻击、进程调度、baseline 和 reuse 规则见[完整指南](benchmark.md)。默认输出分类根为 `results/partial_benchmark`，新 CLI 路径均为 `<results-dir>/<backend>/<model>_<name>/`。代理检查显式写入新的 `artifacts/<日期>_<任务>/`。
 

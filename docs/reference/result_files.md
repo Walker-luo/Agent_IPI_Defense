@@ -53,3 +53,7 @@ generation、`authorization_intents`、`authorization_tools`、`intent_progress`
 ## 只读汇总
 
 已有目录可用 `python -m experiments.diagnostics.summarize_results --help` 查看路由报告生成选项。默认保护已有报告，显式刷新仅限该工具拥有的派生产物；不改原生评分、轨迹或历史模型回复。Dashboard 和 CLI 共用读取、分母与成本契约，完整失败索引优先于短摘要。
+
+## 目标筛选与 GOAL
+
+目标型 CLI 运行的根 `summary.json` 记录排除前后任务、移除组合及 GOAL 结果。原生计分路径沿用现有布局。GOAL 轨迹在 `goal/attempts/`，其调用和 Token 在根报告中单列，未知 usage 保持未知。筛选和预检结果不进入 TSR 或 ASR 分母。

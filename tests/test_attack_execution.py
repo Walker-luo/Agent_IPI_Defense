@@ -15,7 +15,8 @@ def probe(job):
     start = time.monotonic()
     time.sleep(.2)
     return {'suite_reports': [{'attack': job['attack'], 'suite': job['suite'],
-                              'pid': os.getpid(), 'start': start, 'end': time.monotonic()}]}
+                              'pid': os.getpid(), 'start': start, 'end': time.monotonic(),
+                              'resources': job.get('resources')}]}
 
 
 class AttackExecutionTests(unittest.TestCase):
@@ -27,10 +28,15 @@ class AttackExecutionTests(unittest.TestCase):
         events=[]
         jobs=self.jobs();gate=multiprocessing.get_context('spawn').Barrier(3)
         for i in (0,2,4):jobs[i]['gate']=gate
+        selection = {'fliter': {'excluded': {'first': ['injection_task_0']}},
+                     'goal_retained': {('first', 'injection_task_1')}}
+        for job in jobs:
+            job['resources'] = {**selection, 'descriptor': lambda: None}
         pairs=list(iter_attack_results(jobs, on_event=events.append, execute=probe))
         results={i:r for i,r in pairs}
         rows=[results[i]['result']['suite_reports'][0] for i in range(6)]
         self.assertEqual(len({r['pid'] for r in rows}),3)
+        self.assertTrue(all(r['resources'] == selection for r in rows))
         self.assertNotIn(os.getpid(),{r['pid'] for r in rows})
         self.assertLess(max(r['start'] for r in rows[::2]), min(r['end'] for r in rows[::2]))
         for i in range(0,6,2):

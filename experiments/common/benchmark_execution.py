@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 import shutil
 
-from experiments.common.partial_controls import RunConfigurationError, guard_run
+from experiments.common.partial_controls import RunConfigurationError, guard_run, has_unbound_cache
 from experiments.common.benchmark_reuse import _compatible_binding
 
 
@@ -44,8 +44,7 @@ class PreparedBindings:
                 self.transitions.append((path, previous, expected))
             self.evidence[path] = path.read_bytes()
         else:
-            if path.parent.exists() and ((path.parent / 'summary.json').exists()
-                    or any(path.parent.rglob('injection_task_*.json')) or any(path.parent.rglob('none.json'))):
+            if path.parent.exists() and has_unbound_cache(path.parent):
                 raise RunConfigurationError('unbound historical cache; use a new --name')
             self.pending[path] = expected
         self.checked[path] = expected

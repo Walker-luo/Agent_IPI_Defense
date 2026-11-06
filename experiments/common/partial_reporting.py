@@ -196,7 +196,7 @@ def _rate(passed: int, denominator: int, *, enabled: bool = True) -> str:
 
 def write_run_overview(base_dir: Path, attack_names: list[str], suites: list[str],
                        run_records: list[dict], suite_reports: list[dict], *, model_id=None,
-                       task_scope='partial', routing_summary=None) -> tuple[Path, Path]:
+                       task_scope='partial', routing_summary=None, selection_report=None) -> tuple[Path, Path]:
     """Write two additive run artifacts. Native traces and metrics stay untouched."""
     backend = get_backend()
     summary_path = base_dir / "summary.md"
@@ -218,6 +218,13 @@ def write_run_overview(base_dir: Path, attack_names: list[str], suites: list[str
                           "source_path": metadata,
                           **({'execution_error': run['execution_error']} if 'execution_error' in run else {}),
                           **({'api_error': run['api_error']} if 'api_error' in run else {})})
+    for check in (selection_report or {}).get('goal_checks', []):
+        if check['status'] == 'error':
+            cases.append({'attack': None, 'suite': check['suite'], 'model_id': model_id,
+                          'user_task_id': None, 'injection_task_id': check['injection_task_id'],
+                          'phase': 'goal_preflight', 'failure_types': ['goal_preflight_error'],
+                          'sample_status': 'infrastructure_error', 'trace_path': check.get('trace_path'),
+                          'excerpt_status': 'not_scored_preflight', 'excerpts': []})
     for line, case in enumerate(cases, 1):
         case.update(schema_version="baseintent.partial-failure.v2", benchmark=benchmark_identity(), case_id=f"F{line:04d}", detail_line=line)
     with detail_path.open("w", encoding="utf-8") as stream:
@@ -269,6 +276,16 @@ def write_run_overview(base_dir: Path, attack_names: list[str], suites: list[str
                        task_errors, report.get('framework_failures',0), _link(report["summary_path"])]
             # Links are already Markdown-escaped.
             lines.append("| " + " | ".join(_cell(value) for value in row[:-1]) + " | " + row[-1] + " |")
+    if selection_report:
+        lines += ['', '## 目标筛选', '']
+        for group in selection_report['groups']:
+            lines.append(f"- {group['attack']} / {group['suite']}：{len(group['before'])} → "
+                         f"{len(group['retained'])} 个目标，移除 {group['removed_pairs']} 个组合。")
+        for check in selection_report['goal_checks']:
+            if check['status'] != 'pass':
+                lines.append(f"- **GOAL {check['suite']}/{check['injection_task_id']}：{check['status']}**")
+        for scope, cost in selection_report.get('goal_cost', {}).items():
+            lines.append(f"- GOAL {scope}：已知 Token {cost['known_tokens']}，未知 usage {cost['unknown_usage']} 例。")
     lines.extend(["", "各场景 Token 统计范围："])
     for report in suite_reports:
         data = report["summary"]

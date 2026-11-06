@@ -66,11 +66,11 @@ class ReusePlan:
         if not self.base.is_dir():
             raise RunConfigurationError('--reuse directory does not exist; use the original --name/results directory')
         self.existing_runs = set(self.base.glob('*/*/run_manifest.json'))
-        if not self.existing_runs:
+        if not self.existing_runs and not (self.base / 'goal_plan.json').is_file():
             raise RunConfigurationError('--reuse requires existing verifiable run manifests')
         self.checked = {}; self.pending = {}; self.evidence = {}; self.transitions = []
         self.committed = False
-        roots = [self.base / p for p in ('benchmark_plan.json', 'screened_run_manifest.json', 'attack_manifest.json', 'suite_manifest.json')]
+        roots = [self.base / p for p in ('benchmark_plan.json', 'goal_plan.json', 'screened_run_manifest.json', 'attack_manifest.json', 'suite_manifest.json')]
         metadata = [(p.name, _read(p)) for p in roots if p.exists()]
         screened = next((item for name, item in metadata if name == 'screened_run_manifest.json'), None)
         active = ([name for name, entry in screened['selected_tasks'].items() if entry['injection_task_ids']]

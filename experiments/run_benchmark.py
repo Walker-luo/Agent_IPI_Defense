@@ -1,7 +1,7 @@
 """Full benchmark entry point sharing execution, controls and reports with partial.
 
 Defaults select all current backend suites; --suites selects complete suite catalogues.
-Explicit --cohort retains all users in selected suites and frozen kept targets.
+Optional --fliter excludes targets and --goal checks remaining targets.
 """
 from pathlib import Path
 
@@ -26,6 +26,8 @@ def main(
     cohort_path: str | Path | None = None,
     reuse: bool = False,
     progress: bool = False,
+    fliter_path: str | Path | None = None,
+    goal: bool = False,
     **options,
 ) -> int:
     """Run all tasks within selected suites, retaining shared controls and defaults."""
@@ -33,14 +35,7 @@ def main(
         raise ValueError('full benchmark task scope cannot be overridden')
     suites = list(get_suites()) if suites is None and not reuse else suites
     if cohort_path is not None:
-        if not run_attack or options.get('task_manifest_path'):
-            raise ValueError('--cohort cannot be combined with clean or another task manifest')
-        options.pop('task_manifest_path', None)
-        from experiments.common.injection_cohort import run_screened
-        return run_screened(cohort_path, model_id=model_id, sec_model_id=sec_model_id,
-                            origin=origin, defense=defense, use_sandbox=use_sandbox,
-                            use_security_checker=use_security_checker, suites=suites, reuse=reuse,
-                            progress=progress, **options)
+        raise ValueError('cohort execution is retired; use --fliter')
     results_dir = options.pop('results_dir', None)
     return runner.main(
         model_id=model_id, sec_model_id=sec_model_id, suites=suites,
@@ -49,6 +44,8 @@ def main(
         task_scope='full',
         reuse=reuse,
         progress=progress,
+        fliter_path=fliter_path,
+        goal=goal,
         results_dir=results_dir if results_dir is not None else BENCHMARK_RESULTS_DIR,
         **options,
     )

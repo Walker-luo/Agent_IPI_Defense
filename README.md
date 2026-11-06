@@ -36,7 +36,7 @@ python -m experiments.run_partial_benchmark --suites banking slack \
 python -m dashboard.app
 ```
 
-Dashboard 默认地址为 [http://127.0.0.1:8888/](http://127.0.0.1:8888/)。完整任务、baseline、clean、冻结 cohort 和续跑命令见[评测指南](docs/benchmark.md)。全量评测应由用户明确启动。
+Dashboard 默认地址为 [http://127.0.0.1:8888/](http://127.0.0.1:8888/)。完整任务、baseline、clean、目标筛选和续跑命令见[评测指南](docs/benchmark.md)。全量评测应由用户明确启动。
 
 ## 当前框架
 

@@ -241,7 +241,7 @@ class FullExecutionTests(unittest.TestCase):
         ):
             self.assertEqual(full.main(origin=True, suites=['slack'], results_dir=directory,
                                        run_name='unknown', attack='injecagent'), 0)
-            summary = json.loads(next(Path(directory).rglob('summary.json')).read_text())
+            summary = json.loads(next(Path(directory).glob('*/*/injecagent/slack/summary.json')).read_text())
             self.assertIsNone(summary['metrics']['attack_success_rate'])
             self.assertIsNone(summary['metrics']['defense_success_rate'])
             self.assertEqual(summary['task_counts']['attacked_tasks'], 0)
@@ -264,14 +264,16 @@ class FullExecutionTests(unittest.TestCase):
             _append_full_trace({'_baseintent_trace_level': 'full'}, 'fixture', {'offline': True})
             return True, False
 
+        from experiments.common.benchmark_tasks import run_native_suite
         with TemporaryDirectory() as directory, redirect_stdout(StringIO()), patch.object(
+            shared, 'run_suite_with_progress', side_effect=run_native_suite), patch.object(
             shared, 'make_openai_compatible_pipeline', side_effect=factory,
         ), patch.object(type(suite), 'run_task_with_pipeline', autospec=True, side_effect=execute) as task:
             options = dict(model_id=model, origin=True, suites=['slack'], results_dir=directory, run_name='native',
                            attack='tool_knowledge')
             self.assertEqual(full.main(**options), 0)
-            expected = len(suite.injection_tasks) * (len(suite.user_tasks) + 1)
-            self.assertEqual(task.call_count, expected)  # Includes unscored injection-task preflights.
+            expected = len(suite.injection_tasks) * len(suite.user_tasks)
+            self.assertEqual(task.call_count, expected)
             base = Path(directory) / f'agentdojo/{model}_native'
             output = base / 'tool_knowledge/slack'
             scored = list(output.glob('user_task_*/tool_knowledge/injection_task_*.json'))
