@@ -1,6 +1,6 @@
 # L3 路由：当前边界与未验收项
 
-当前规则为`sink-free-read-v4`，实现见 [audit_router.py](../dscg/audit_router.py)与[流水线](../dscg/pipelines/defended.py)；操作见[配置指南](../docs/model_tool_configuration.md#l3读取路由)及[结果指南](../docs/result_files.md)。
+当前规则为`sink-free-read-v4`，实现见 [audit_router.py](../../../dscg/audit_router.py)与[流水线](../../../dscg/pipelines/defended.py)；操作见[配置指南](../../../docs/model_tool_configuration.md#l3读取路由)及[结果指南](../../../docs/result_files.md)。
 
 ## 当前规则
 
@@ -13,4 +13,4 @@
 
 没有建立独立安全标签下的一般风险上界、适应性攻击安全或真实Token节省结论。任何新路由规则须先选择明确范围，保留匹配clean／攻击、错误、未知成本和原生标签；不得凭audit allow或shadow分歧替代独立验证，也不得自动把历史校准范围扩大到新工具。
 
-历史算法与阈值设计见 [算法实施](completed/l3_algorithm_implementation_20261010.md)、[阈值阶段](completed/l3_threshold_20261021.md)；当前后续工作以 [DV_STATE.md](../DV_STATE.md)为准。
+历史算法与阈值设计见 [算法实施](../../completed/l3_algorithm_implementation_20261010.md)、[阈值阶段](../../completed/l3_threshold_20261021.md)；当前后续工作以 [DV_STATE.md](../../../DV_STATE.md)为准。

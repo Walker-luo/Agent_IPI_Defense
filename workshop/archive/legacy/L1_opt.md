@@ -1,6 +1,6 @@
 # L1 结构化投影：当前边界与未验收项
 
-当前实现见 [input_isolation.py](../dscg/input_isolation.py)、[l1_projection.py](../dscg/l1_projection.py)和[配置指南](../docs/model_tool_configuration.md)。版本与默认值跟随当前代码，不沿用早期提案的框架身份。
+当前实现见 [input_isolation.py](../../../dscg/input_isolation.py)、[l1_projection.py](../../../dscg/l1_projection.py)和[配置指南](../../../docs/model_tool_configuration.md)。版本与默认值跟随当前代码，不沿用早期提案的框架身份。
 
 ## 已实现边界
 
@@ -13,4 +13,4 @@
 
 更广原生返回格式、字段与引用保真、真实安全／效用／总成本对照仍需独立选择范围和验证。字符减少不是Token或费用节省证据，不因投影后缺少攻击词扩大L3免审。保持用户确认的任务源污染范围及研究侧未解锁机制边界。
 
-原提案与有限实现记录见 [2026-10-13阶段报告](completed/l1_projection_20261013.md)及其原始归档。历史设计中的未实现状态和默认值不适用于当前代码；后续工作从 [DV_STATE.md](../DV_STATE.md)选择，不重新执行旧计划。
+原提案与有限实现记录见 [2026-10-13阶段报告](../../completed/l1_projection_20261013.md)及其原始归档。历史设计中的未实现状态和默认值不适用于当前代码；后续工作从 [DV_STATE.md](../../../DV_STATE.md)选择，不重新执行旧计划。
