@@ -9,6 +9,11 @@ from dscg.paths import BENCHMARK_RESULTS_DIR
 from experiments import run_partial_benchmark as runner
 from dscg.benchmark_catalog import get_suites
 
+import os as _os
+
+if _os.environ.get("DSCG_AUTOINJECT_SUFFIX_MAP"):
+    from experiments.common import autoinject_suffix_attack as _autoinject_suffix_attack  # noqa: F401
+
 # Preserve helpers imported by older local callers.
 _safe_result_component = runner._safe_result_component
 _apply_run_name = runner._apply_run_name
