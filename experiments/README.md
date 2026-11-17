@@ -65,7 +65,7 @@ python -m experiments.calibration.calibrate_l3_router --help
 python -m experiments.tools.generate_tool_metadata --help
 ```
 
-专项工具按需使用；I3仍为partial，E0合成自检不等于真实E0通过。L3准备与校准方法见 [L3方案](../workshop/L3_checker_opt.md)，元数据用法见 [配置指南](../docs/model_tool_configuration.md)。
+专项工具按需使用；I3仍为partial，E0合成自检不等于真实E0通过。L3准备与校准方法见 [L3方案](../workshop/archive/legacy/L3_checker_opt.md)，元数据用法见 [配置指南](../docs/model_tool_configuration.md)。
 
 旧顶层专项模块不保留转发壳；历史报告中的旧命令保留当时上下文，复跑使用上述新路径。原始字节及路径/哈希映射见 [本次归档](../workshop/archive/experiments_layout_20261017/README.md)。先前移除的专用诊断/绘图代码仍在 [早期归档](../workshop/archive/experiments_docs_cleanup_20261017/README.md)，不恢复到当前目录。
 
