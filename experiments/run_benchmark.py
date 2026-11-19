@@ -8,6 +8,8 @@ from pathlib import Path
 from dscg.paths import BENCHMARK_RESULTS_DIR
 from experiments import run_partial_benchmark as runner
 from dscg.benchmark_catalog import get_suites
+from experiments.attacks import multi_step as _multi_step_attacks  # noqa: F401 (test-only attacks)
+from experiments.attacks import l3_authorized as _l3_authorized  # noqa: F401 (test-only attacks)
 
 import os as _os
 

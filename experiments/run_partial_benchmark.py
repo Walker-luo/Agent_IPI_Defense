@@ -45,6 +45,8 @@ from experiments.common.benchmark_progress import GroupProgress, run_suite_with_
 from experiments.common.error_diagnostics import execution_error_diagnostics
 from experiments.common.native_cache_compat import ensure_native_cache_model_ready
 from experiments.common.attack_compatibility import check_attack_compatibility
+from experiments.attacks import multi_step as _multi_step_attacks  # noqa: F401 (test-only attacks)
+from experiments.attacks import l3_authorized as _l3_authorized  # noqa: F401 (test-only attacks)
 
 
 TYPICAL_ATTACKS = (

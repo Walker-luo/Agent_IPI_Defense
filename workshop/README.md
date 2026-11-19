@@ -6,6 +6,7 @@
 
 | 材料 | 用途 |
 | --- | --- |
+| [投稿前模型与防御对照扩展计划](model_framework_comparison_plan_20261117.md) | 待执行：clean 与成本核证、DRIFT 对照、第四模型验证 |
 | [L3 多步注入评估计划](l3_multistep_plan.md) | 待执行：用可实现的强攻击测出 L3 净贡献的阶段性方案 |
 | [消融分析](../analysis/ablation.md) | full / NoL3 现状：ASR 天花板、L3 拦截与误拒 |
 | [全量对比报告](completed/20261111_comparison_full.md) | Spotlighting / MELON / IPIGuard 对比与判定 |

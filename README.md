@@ -68,6 +68,39 @@ python -m dashboard.app
 
 最新 workspace 消融中，完整组与 NoL3 均为零攻击命中；NoL2 路径同时丢失工具元数据，导致 L3 大量 `MISSING_EVIDENCE` 阻断。该缺陷尚未修复，当前结果须结合这一干扰解释，见 [当前问题](docs/framework_updates.md)。消融原始结果归档在 `results/workshop/agentdojo/ablation/`，Dashboard 历史页把 `ablation` 作为模型值直接选择。
 
+## 论文投稿（IWCMC 2027 · AIMLL Workshop）
+
+论文工作区在兄弟目录 [`../paper/GrantBind`](../paper/GrantBind)（稿件 `main.tex`、要求档案 `requirements/`、图与脚本 `fig/`、打包 `tools/`）；本仓库负责代码、结果与数据可重跑。目标是一篇 **≤6 页的 IEEEtran conference 双栏论文**，按 CFP 要求原创、未同时投稿，录用并报告后进入 IEEE Xplore（[AIMLL CFP](<../paper/GrantBind/requirements/AIMLL WS.pdf>)）。
+
+| 里程碑 | 官方日期 | 交付物 |
+| --- | --- | --- |
+| 投稿截止 | 2027-01-15（时区待核实） | `main.pdf` ≤6 页 + `GrantBind.zip` 源包，Sparcly（conference=100 / entity=495）提交 |
+| 录用通知 | 2027-03-30 | 评审意见归档，决定修订/撤稿 |
+| Camera-ready | 2027-04-30 | 终稿 PDF（IEEE eCF / PDF eXpress）、版权表、图源 |
+| 作者注册 | 2027-05-15 | 至少一位作者注册回执 |
+| 会议 | 2027-06-13—17（官网列 06-13—18，差异待核） | 报告 slides；Best Paper 参评 |
+
+**阶段**
+
+1. **合规前置（P0）**：登录 Sparcly 核对 entry 显示名、主席、盲审规则与截止时区（本地 CFP 与官网列名不一致，CFP 还误写"IEEE IWCMC 2026 proceedings"）；确认原创且未同时投稿；复核 IEEE 的 AI 使用披露与伦理要求。结论回填论文仓 `requirements/venue.md` 与 `official-sources.md`。
+2. **证据冻结**：正文口径固定为 v3.7（`v3.6.3` ≡ 同配置），三模型主结果 + 外部防御对照；补齐可比 clean 与同计分范围成本；页数与图只引用 `fig/` 脚本重算出的数字，禁止手抄。L3 相关主张以 [L3 多步注入评估计划](workshop/l3_multistep_plan.md) 的结论为准——未形成可分析结果时正文只写"机制互补"，不宣称实证增益。
+3. **写作与页数**：按论文仓 `requirements/venue.md` 的 P0/P1 清单闭环；页数由 `tools/build.sh` 读取 `requirements/page_limit` 检查，超页优先压缩附录与图，不加页。
+4. **发布检查**：`./tools/release.sh GrantBind` 生成提交包；核对页数、图引用、参考文献、未定义引用、匿名/署名与 AI 披露；`GrantBind.zip` 与目录名一致，只含正文引用图；旧 rev2 留在 `archive/`。
+5. **提交与归档**：Sparcly 上传 PDF 与源包；把 submission ID、回执与截图归档到论文仓 `requirements/official-sources.md`，并在 `DV_STATE.md` 记一行状态。
+6. **录用后**：按意见修订；camera-ready 核对 eCF、PDF eXpress、超页费、作者顺序与单位；准备 06 月报告。
+
+**提交前清单**
+
+- [ ] 页数 ≤6，IEEEtran conference 双栏，无未定义引用
+- [ ] 匿名/署名与 track 规定一致（盲审规则核实后再定）
+- [ ] 原创、未同时投稿（作者确认）
+- [ ] AI 使用披露与致谢、基金信息合规
+- [ ] 正文数字与图可由 `fig/` 脚本重跑，数据根为 `results/workshop`
+- [ ] `GrantBind.zip` 命名与内容符合会务要求
+- [ ] submission ID 与回执归档
+
+**阻塞项**：Sparcly entry 的显示名与主席、盲审规则、截止时区、2027 作者指南/模板/纸型、PDF eXpress 编号与注册平台、Xplore 收录条件与超页费，均待官方页面可读或登录后核实，不能以往年流程替代。
+
 ## 文档与目录
 
 [文档索引](docs/README.md) · [架构与层间通信](docs/architecture.md) · [项目状态](DV_STATE.md) · [协作规则](AGENTS.md)
