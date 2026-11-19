@@ -1,6 +1,6 @@
 # GrantBind 投稿前模型与防御对照扩展计划
 
-**状态**　P1 的 DRIFT 小批量（108 攻击键 + 12 clean）已于 2026-11-18 完成，见 [报告](completed/20261118_drift_p1.md)；全量（1947 + 97）待确认。核对基线为工作站 `workshop@84e4653`。
+**状态**　P1 的 DRIFT 已完成小批量（108 + 12，[报告](completed/20261118_drift_p1.md)）与全量（1947 + 97，[报告](completed/20261119_drift_full.md)）。核对基线为工作站 `workshop@84e4653`。
 
 **目标**　为 IWCMC 2027 · AIMLL Workshop 补齐完整系统的 clean 与成本证据，增加一个可严格配对的外部防御，验证 GrantBind 能否迁移到独立的模型家族。正文按 6 页组织。
 
@@ -33,7 +33,7 @@
 
 - [x] 从归档 `comparison/partial_108/{baseline_108,v37_108}` 冻结任务键、注入位置、原始输入摘要和排除表（108 攻击键 + 12 clean；注入 sha256 全部一致）。覆盖 Workspace、Travel、Banking、Slack 及 `ignore_previous`、`important_instructions`、`tool_knowledge`，每臂 **108 个注入计分键 + 12 个 clean 键**。clean 名单从对应历史 clean 臂冻结。
 - [x] 锁定 DRIFT 官方 revision（`6fd3df4`）、套件（AgentDojo 0.1.35 / v1.2）和调用范围；Qwen 经 DashScope OpenAI 兼容端点接入，仅改 `base_url` 与 `max_tokens`。DRIFT 用独立对照入口，Native 和 GrantBind 用 [小批量入口](../docs/partial_benchmark.md)。开跑前逐臂核对测试键、原始注入文本与位置、任务定义、工具 schema、原生评分和实际请求设置。
-- [x] Qwen3.7-Flash 历史 Native / GrantBind 满足配对要求，只跑 DRIFT 的 **120** 个计划计分任务（108 攻击 + 12 clean，0 缺失、0 注入不一致）。全量 1947+97 的 DRIFT 臂待单独确认。历史参考不能复用时，补跑所需参考臂，三臂全新上限 **360**。若 DRIFT 无法保真接入 Qwen，优先将 DRIFT 合并到下节获准的第四模型实验，三臂使用同一个模型。若保真条件仍不满足，评估 Progent 的单臂可行性并记录阻塞原因。
+- [x] Qwen3.7-Flash 历史 Native / GrantBind 满足配对要求，只跑 DRIFT 的 **120** 个计划计分任务（108 攻击 + 12 clean，0 缺失、0 注入不一致）。全量 1947+97 的 DRIFT 臂已完成（100 分块、0 错误、8 小时 16 分）。历史参考不能复用时，补跑所需参考臂，三臂全新上限 **360**。若 DRIFT 无法保真接入 Qwen，优先将 DRIFT 合并到下节获准的第四模型实验，三臂使用同一个模型。若保真条件仍不满足，评估 Progent 的单臂可行性并记录阻塞原因。
 
 ## 4. P2 · 扩展一个模型家族
 
