@@ -1,6 +1,6 @@
 # BaseIntent Project State
 
-更新：2026-10-28（Asia/Shanghai）。本文件仅记录本项目的当前事实，恢复时与代码／Git交叉核对。
+更新：2026-11-20（Asia/Shanghai）。本文件记录本项目的当前状态和历史核验，恢复时与代码／Git 交叉核对。
 
 ## 系统架构图（2026-10-29）
 
@@ -10,14 +10,15 @@
 
 ## 当前身份
 
-- 工作目录：`/Users/luo/Desktop/AgentDefence/BaseIntent`；分支 `BaseIntent`；任务起点 HEAD `361f7db5d76c540278f66464aad0d4942f2f85d4`，起点干净。
-- 用户选择保留 Git linked-worktree／历史／remote，不拆仓、不提交、不推送。当前只独立代码、文档和平台。
+- `/Users/luo/Desktop/AgentDefence/BaseIntent` 已从原 linked worktree 独立为 Git 仓库。Git 目录和公共目录均为仓库内的 `.git/`，当前只有一个工作区，分支为 `BaseIntent`。
+- GitHub 地址为 `git@github.com:Walker-luo/Agent_IPI_Defense.git`，SSH 核验的默认分支为 `master`。核验时本地 `origin` 的拉取与推送地址仍为 `git@github.com:Walker-luo/DSCG.git`。
+- 本次文档更新前，本地 `BaseIntent` 位于 `f80754a`，比 GitHub 上位于 `ad135a4` 的同名分支领先 3 个提交。此次核验保留已有的本地未提交改动。
 - Python包 `baseintent`；默认引擎标识 `BaseIntent`；原生AgentDojo／AgentDyn、模型、环境名和当前防御算法保留。运行名不选择策略。
 - 新环境变量、诊断字段／sidecar、协议命名使用 BaseIntent；旧历史通过只读边界加载，原身份／原生内容／字节不变。新旧环境变量冲突明确拒绝。
 
 ## 当前开发基线（2026-10-27 初始化）
 
-- 已核验：分支 `BaseIntent`，当前 HEAD `ad135a4447e3409c6d1ad4d6458573b93a6f2402`；初始化前工作区干净。上文 `361f7db…` 为独立化任务的历史起点。
+- 初始化时核验的分支为 `BaseIntent`，HEAD 为 `ad135a4447e3409c6d1ad4d6458573b93a6f2402`，初始化前工作区干净。此前独立化任务的历史起点为 `361f7db5d76c540278f66464aad0d4942f2f85d4`。
 - 已阅读项目约束、当前框架、维护／验证指南，并核对流水线工厂、L2两次授权、准备归并、固定读取免审及L3判决校验的源码入口。后续工作以框架防御设计和相关优化为主，具体方案尚未制定或实现。
 - 本次离线检查：`conda run -n ipi python -B -m baseintent.benchmark_catalog` 与 `conda run -n ipi-agentdyn python -B -m baseintent.benchmark_catalog` 均 exit 0；实际导入分别识别 AgentDojo 0.1.35／4场景和锁定 revision 的 AgentDyn／3场景。两者均为 `metadata_only`、`runtime_variant=unverified`，不证明源代码或服务行为。
 - 本次仅更新状态记录，未更改防御行为；未重跑完整回归、未调用模型，API调用与Token成本均为0。既有回归失败及有限效用结论仍沿用下文历史记录，不作为本次重新验证结果。
