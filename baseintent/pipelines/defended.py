@@ -50,7 +50,8 @@ from baseintent.audit_router import (LocalAuditRouter, RouterReceiptVerifier, ar
                                normalized as router_normalized, digest as router_digest,
                                catalog_snapshot as router_catalog_snapshot, DEFAULT_THRESHOLD, POLICY_VERSION as ROUTER_POLICY_VERSION,
                                validate_router_options)
-from baseintent.audit_context import (INPUT_SCHEMA as AUDIT_INPUT_SCHEMA_VERSION, EVIDENCE_VERSION,
+from baseintent.audit_context import (INPUT_SCHEMA as AUDIT_INPUT_SCHEMA_VERSION,
+                                ADAPTIVE_EVIDENCE_VERSION, EVIDENCE_VERSION, EXPANDED_FACT_BUDGET,
                                 FACT_BUDGET, MAX_RESULTS, MAX_CALL_ARGUMENTS, select_tool_evidence)
 from baseintent.prompt_profiles import (validate_profile, semantic_catalog, audit_policy,
                                   authorization_policy, profile_binding, CATALOG_SCHEMA)
@@ -2741,6 +2742,7 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
                 "source_ids": _source_ids_for_call(call, extra_args),
             })
         current_context = self.prompt_profile in ('legacy', 'legacy-v34', V35_PROFILE) and not getattr(self, '_legacy_audit_input', False)
+        intent_context = current_context and self.prompt_profile == 'legacy'
         if current_context:
             statuses = metadata_for_runtime(runtime)
             for action in current_actions:
@@ -2756,7 +2758,8 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
             for name in tool_names
         ] if self.sandbox is not None else []
         tool_results, window_truncated, selection = select_tool_evidence(
-            messages, query, tool_calls, _normalise_text, _normalise_audit_value, argument_flags)
+            messages, query, tool_calls, _normalise_text, _normalise_audit_value, argument_flags,
+            adaptive_budget=intent_context)
         packet = {
             "schema_version": "baseintent.audit-input.v4" if current_context else AUDIT_INPUT_SCHEMA_VERSION,
             **({"decision_contract": AUDIT_SCHEMA} if current_context else {}),
@@ -2809,7 +2812,7 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
                 action.pop('arguments_sha256', None)
             for result in tool_results:
                 result['return_status'] = 'blocked' if is_blocked_error(result.get('error')) else 'error' if result.get('error') else 'success'
-        if self.prompt_profile == 'legacy' and not getattr(self, '_legacy_audit_input', False):
+        if intent_context:
             active_flow = self.intent_flow_getter() if self.intent_flow_getter else None
             current = active_flow.current if active_flow is not None else None
             packet['schema_version'] = 'baseintent.audit-input.intent-flow.v2'
@@ -3034,11 +3037,14 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
                                           "raw_audit_decision": "deny", "original_public_bypass": False})
                 return query, runtime, env, messages, extra_args
         packet = self._audit_packet(query, runtime, tool_calls, extra_args, messages=messages)
-        evidence_stats = extra_args.setdefault('baseintent_audit_evidence', {'version': EVIDENCE_VERSION, 'packets': 0,
+        selection = packet['tool_results_selection']
+        evidence_stats = extra_args.setdefault('baseintent_audit_evidence', {'version': selection['version'], 'packets': 0,
             'selected_results': 0, 'omitted_results': 0, 'content_characters': 0, 'truncated_results': 0})
         evidence_stats['packets'] += 1
+        if 'budget_expanded' in selection:
+            evidence_stats['expanded_packets'] = evidence_stats.get('expanded_packets', 0) + int(selection['budget_expanded'])
         for key in ('selected_results', 'omitted_results', 'content_characters'):
-            evidence_stats[key] += packet['tool_results_selection'][key]
+            evidence_stats[key] += selection[key]
         evidence_stats['truncated_results'] += sum(r['content_truncated'] for r in packet['recent_tool_results'])
         _append_full_trace(extra_args, "audit_input", self._model_audit_packet(packet))
         input_hash = _hash_json(self._model_audit_packet(packet))
@@ -3250,6 +3256,11 @@ def router_configuration_hash(main_config, sec_config, *, input_isolation, autho
     if prompt_profile == V35_PROFILE:
         decision_contracts = {'audit': audit_contract_identity(sec_config),
                               'authorization': {'protocol': V35_AUTH_PROTOCOL, 'response_format': response_format(main_config, {}, 'baseintent_tool_permissions_v1')['type']} if profile_hash is None else {'protocol': 'configured-profile-json-object', 'response_format': 'json_object'}}
+    evidence_version = EVIDENCE_VERSION
+    evidence_bounds = [FACT_BUDGET, MAX_RESULTS, MAX_CALL_ARGUMENTS]
+    if prompt_profile == 'legacy':
+        evidence_version = ADAPTIVE_EVIDENCE_VERSION
+        evidence_bounds.append(EXPANDED_FACT_BUDGET)
     return router_digest({**({'decision_contracts': decision_contracts} if decision_contracts else {}), **({"router_policy_version": ROUTER_POLICY_VERSION,
                                              "router_threshold": validate_router_options(audit_router_threshold),
                                              "router_scope": "ordinary-public-internal-read-batches-and-literal-public-web"}
@@ -3275,8 +3286,8 @@ def router_configuration_hash(main_config, sec_config, *, input_isolation, autho
                                            "audit_retries": audit_retries,"completion_prompt": completion_prompt,
                                            "audit_timeout_seconds": AUDIT_TIMEOUT_SECONDS,
                                            'audit_input_schema': 'baseintent.audit-input.v5.10' if prompt_profile == V35_PROFILE else 'baseintent.audit-input.v4' if prompt_profile in ('legacy', 'legacy-v34') else AUDIT_INPUT_SCHEMA_VERSION,
-                                           'audit_evidence_version': EVIDENCE_VERSION,
-                                           'audit_evidence_bounds': [FACT_BUDGET, MAX_RESULTS, MAX_CALL_ARGUMENTS],
+                                           'audit_evidence_version': evidence_version,
+                                           'audit_evidence_bounds': evidence_bounds,
                                            "input_bounds": [AUDIT_MAX_REQUEST_LENGTH,AUDIT_MAX_TOOL_DESCRIPTION_LENGTH,
                                                             AUDIT_MAX_STRING_LENGTH,AUDIT_MAX_ARGUMENT_DEPTH,
                                                             AUDIT_MAX_HISTORY_RECORDS,AUDIT_MAX_TOOL_RESULTS,AUDIT_MAX_TOOL_RESULT_LENGTH]})

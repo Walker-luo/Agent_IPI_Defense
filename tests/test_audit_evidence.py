@@ -20,8 +20,8 @@ def result(name, args, text, ident='read', error=None):
 
 
 class AuditEvidenceTests(unittest.TestCase):
-    def packet(self, query, messages, name='send_email', args=None):
-        checker = ActionSecurityChecker(SimpleNamespace(name='offline'))
+    def packet(self, query, messages, name='send_email', args=None, *, profile='legacy'):
+        checker = ActionSecurityChecker(SimpleNamespace(name='offline'), prompt_profile=profile)
         call = FunctionCall(function=name, args=args or {}, id='candidate')
         return checker._audit_packet(query, FunctionsRuntime(), [call], {}, messages)
 
@@ -84,13 +84,43 @@ class AuditEvidenceTests(unittest.TestCase):
         messages = [user(query)] + [result('read_records', {'path': str(i)}, 'x' * 12000, str(i))
                                    for i in range(12)]
         packet = self.packet(query, messages, 'read_records')
-        self.assertLessEqual(sum(len(r['content']) for r in packet['recent_tool_results']), 8192)
+        selection = packet['tool_results_selection']
+        self.assertEqual(selection['fact_budget'], 32768)
+        self.assertEqual(selection['selected_results'], 8)
+        self.assertLessEqual(sum(selection[key] for key in (
+            'content_characters', 'call_argument_characters', 'error_characters')), 32768)
         self.assertTrue(packet['tool_results_window_truncated'])
         self.assertTrue(any(r['content_truncated'] for r in packet['recent_tool_results']))
         messages = [user(query), result('read_records', {'path': 'x' * 6000}, '[]')]
         packet = self.packet(query, messages, 'read_records')
         self.assertTrue(packet['recent_tool_results'][0].get('call_arguments_truncated'))
         self.assertLessEqual(len(json.dumps(packet['recent_tool_results'][0]['call_arguments'])), 1024)
+
+    def test_default_audit_keeps_long_return_tail_and_recent_correction(self):
+        query = 'Send the invoice to the current billing contact'
+        messages = [user(query), result('lookup_contact', {}, 'x' * 11000 + '\nContact: alice@example.test', 'original'),
+                    result('lookup_contact', {}, 'Correction: bob@example.test', 'latest')]
+        before = deepcopy(messages)
+        kwargs = {'args': {'recipients': ['bob@example.test']}}
+        packet = self.packet(query, messages, **kwargs)
+        historical = self.packet(query, messages, profile='legacy-v34', **kwargs)
+        evidence = packet['recent_tool_results']
+        self.assertEqual([row['tool_call_id'] for row in evidence], ['original', 'latest'])
+        self.assertTrue(evidence[0]['content'].endswith('Contact: alice@example.test'))
+        self.assertTrue(evidence[1]['content'].endswith('Correction: bob@example.test'))
+        self.assertTrue(all(row['trust'] == 'untrusted' and not row['content_truncated'] for row in evidence))
+        self.assertTrue(packet['tool_results_selection']['budget_expanded'])
+        self.assertEqual(packet['tool_results_selection']['fact_budget'], 32768)
+        self.assertEqual(historical['tool_results_selection']['fact_budget'], 8192)
+        self.assertNotIn('budget_expanded', historical['tool_results_selection'])
+        self.assertTrue(historical['recent_tool_results'][0]['content_truncated'])
+        self.assertEqual(messages, before)
+
+    def test_small_default_audit_uses_standard_evidence_budget(self):
+        query = 'Send the invoice to the current billing contact'
+        packet = self.packet(query, [user(query), result('lookup_contact', {}, 'alice@example.test')])
+        self.assertEqual(packet['tool_results_selection']['fact_budget'], 8192)
+        self.assertFalse(packet['tool_results_selection']['budget_expanded'])
 
     def test_deeply_nested_structured_result_falls_back_instead_of_crashing(self):
         query = 'Delete the largest file'

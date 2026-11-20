@@ -7,9 +7,11 @@ import yaml
 
 INPUT_SCHEMA = 'baseintent.audit-input.v2'
 EVIDENCE_VERSION = 'task-evidence-v1'
+ADAPTIVE_EVIDENCE_VERSION = 'task-evidence-adaptive-v2'
 MAX_RESULTS = 8
 RECENT_RESULTS = 4
 FACT_BUDGET = 8192
+EXPANDED_FACT_BUDGET = 32768
 MAX_CALL_ARGUMENTS = 1024
 MAX_SOURCE_RETURNS = 256
 MAX_STRUCTURED_BYTES = 131072
@@ -108,7 +110,8 @@ def _anchors(value, key='', depth=0):
     return set()
 
 
-def select_tool_evidence(messages, query, calls, normalize_text, normalize_value, argument_flags):
+def select_tool_evidence(messages, query, calls, normalize_text, normalize_value, argument_flags, *,
+                         adaptive_budget=False):
     current = []
     found_user = False
     for message in messages or []:
@@ -164,7 +167,10 @@ def select_tool_evidence(messages, query, calls, normalize_text, normalize_value
         prepared[:-RECENT_RESULTS], key=lambda r: (r[0], r[1]), reverse=True
     )[:MAX_RESULTS - min(RECENT_RESULTS, len(prepared))]
     selected.sort(key=lambda r: r[1])
-    remaining = max(0, FACT_BUDGET - sum(row[3] + row[4] for row in selected))
+    metadata_cost = sum(row[3] + row[4] for row in selected)
+    expanded = adaptive_budget and metadata_cost + sum(len(row[2]['content']) for row in selected) > FACT_BUDGET
+    budget = EXPANDED_FACT_BUDGET if expanded else FACT_BUDGET
+    remaining = max(0, budget - metadata_cost)
     sizes = [0] * len(selected)
     active = list(range(len(selected)))
     while active and remaining:
@@ -182,10 +188,12 @@ def select_tool_evidence(messages, query, calls, normalize_text, normalize_value
         results.append(item)
     omitted = len(current) - len(results)
     return results, bool(omitted), {
-        'version': EVIDENCE_VERSION, 'available_results': len(current),
+        'version': ADAPTIVE_EVIDENCE_VERSION if adaptive_budget else EVIDENCE_VERSION,
+        'available_results': len(current),
         'selected_results': len(results), 'omitted_results': omitted,
         'content_characters': sum(len(r['content']) for r in results),
         'call_argument_characters': sum(row[3] for row in selected),
         'error_characters': sum(row[4] for row in selected),
-        'fact_budget': FACT_BUDGET,
+        'fact_budget': budget,
+        **({'budget_expanded': expanded} if adaptive_budget else {}),
     }

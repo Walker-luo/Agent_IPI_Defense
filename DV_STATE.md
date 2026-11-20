@@ -2,6 +2,13 @@
 
 更新：2026-11-20（Asia/Shanghai）。本文件记录本项目的当前状态和历史核验，恢复时与代码／Git 交叉核对。
 
+## GrantBind 框架对照与 L3 证据预算（2026-11-20）
+
+- 对照 GrantBind `05800a9`。其原文锚点／关系是静态任务视图，BaseIntent 的固定 ID／执行证据负责运行时推进。差异和原文锚点验证方向见 [框架更新](docs/reference/framework_updates.md)。
+- 默认 `legacy` 的 L3 已选回执共享预算从 8,192 字符按需扩至 32,768 字符，记录扩容次数和配置版本。保留历史 profile 的固定预算及当前工具授权、读取免审、进度和 Monitor 协议。
+- AgentDojo 证据回归 15/15、Node 54/54。AgentDojo 全套 783 项，37 失败、25 错误、10 跳过，与 `f80754a` 的 781 项快照逐项一致。该次验证时，旧 linked worktree 的元数据路径失效，源码与对照由临时索引和文件摘要核实。
+- Qwen3.7-Flash 实测 AgentDojo clean 10 个有效案例，效用 8/10、任务错误 0、调用 95 次、331,143 Token、未知 usage 0。9 次审计均走标准预算，扩容分支由离线测试覆盖。`workspace/user_task_38` 的当前 answer 意图未完成，随后提出的删除被 L3 以顺序违规拦截。下一步验证可信原文锚点与准备项目标类型。详见 `artifacts/20261120_grantbind_transfer/verification.md`。
+
 ## 系统架构图（2026-10-29）
 
 - 已实现：依据当前 README、框架文档与核心源码绘制 `docs/figures/system-architecture.html` 并导出 SVG；仅文档图示，无防御行为或模型调用变更。
