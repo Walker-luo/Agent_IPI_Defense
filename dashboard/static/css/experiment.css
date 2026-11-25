@@ -58,7 +58,7 @@
 .framework-strip-heading { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
 .framework-strip-heading strong { color: var(--text-secondary); font-size: 12px; }
 #workspace-mode { margin-left: auto; }
-.framework-layer-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); }
+.framework-layer-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); }
 .framework-layer { display: flex; align-items: center; gap: 10px; padding: 18px 14px; border-right: 1px solid var(--border); }
 .framework-layer:last-child { border-right: 0; }
 .framework-layer > span { flex-shrink: 0; color: var(--layer-color); border: 1px solid var(--layer-color); border-radius: 4px; padding: 3px 5px; font-size: 11px; font-weight: 700; }

@@ -355,8 +355,8 @@ class RequestCompatibilityTests(unittest.TestCase):
         old = {'benchmark':benchmark_identity(), 'main_model': old_public}
         current = {'benchmark':benchmark_identity(), 'main_model': config.public_dict()}
         self.assertFalse(_compatible_binding(old, current))
-        options = dict(input_isolation=True, authorization_precheck=True, l1_projection_mode='projected',
-                       planning_tool_view=True, delegated_tasks=True)
+        options = dict(authorization_precheck=True,
+                      planning_tool_view=True, delegated_tasks=True)
         new_hash = router_configuration_hash(config, config, **options)
         with patch.object(ModelConfig, 'public_dict', return_value=old_public):
             self.assertNotEqual(router_configuration_hash(config, config, **options), new_hash)

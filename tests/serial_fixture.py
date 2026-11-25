@@ -29,7 +29,7 @@ def defended(*args, **kwargs):
     from experiments import run_partial_benchmark as runner
     description = runner._describe_pipeline(args[0] if args else None, args[1] if len(args)>1 else None,
         origin=False, defense=None, **{**dict(use_sandbox=True, use_security_checker=True,
-            l1_projection_mode='projected', planning_tool_view=True, delegated_tasks=True,
+            planning_tool_view=True, delegated_tasks=True,
             audit_router_mode='off', audit_router_artifact=None, audit_retries=0, completion_prompt=False), **kwargs})
     pipe.name = description.name
     pipe.baseintent_optimization_config = description.baseintent_optimization_config

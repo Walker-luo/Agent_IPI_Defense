@@ -28,20 +28,18 @@ class DashboardEvaluationTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 evaluation.normalize_config({'suites':['shopping'], **changes})
 
-    def test_layer_dependencies_and_v2_control_are_recorded_as_effective_config(self):
-        config = evaluation.normalize_config({"suites": ["shopping"], "input_isolation": False,
-                                              "authorization_precheck": False})
-        self.assertFalse(config["input_isolation"])
+    def test_precheck_dependencies_are_recorded_as_effective_config(self):
+        config = evaluation.normalize_config({"suites": ["shopping"], "authorization_precheck": False})
+        self.assertNotIn("input_isolation", config)
         self.assertFalse(config["authorization_precheck"])
         disabled = evaluation.normalize_config({"suites": ["shopping"], "use_sandbox": False,
                                                 "use_security_checker": False})
-        self.assertFalse(disabled["input_isolation"])
         self.assertFalse(disabled["authorization_precheck"])
 
     def test_baseline_has_no_baseintent_layers_or_security_connection(self):
         config = evaluation.normalize_config({"suites": ["shopping"], "origin": True,
                                               "sec_api_key": "unused", "sec_model_id": "unused"})
-        for key in ("input_isolation", "authorization_precheck", "use_sandbox", "use_security_checker"):
+        for key in ("authorization_precheck", "use_sandbox", "use_security_checker"):
             self.assertFalse(config[key])
         self.assertIsNone(config["sec_model_id"])
         self.assertIsNone(config["sec_api_key"])
@@ -151,17 +149,17 @@ class DashboardEvaluationTests(unittest.TestCase):
     def test_worker_saves_real_config_and_both_cost_roles_without_a_model_run(self):
         ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
         config = evaluation.normalize_config({"suites": ["shopping"], "run_attack": False,
-                                               "input_isolation": False, "authorization_precheck": False,
+                                               "authorization_precheck": False,
                                                "trace_level": "standard", "audit_router_mode":"shadow",
                                                "audit_router_threshold":.65})
         def factory(*args, **kwargs):
-            self.assertFalse(kwargs["input_isolation"])
+            self.assertNotIn("input_isolation", kwargs)
             self.assertFalse(kwargs["authorization_precheck"])
             self.assertEqual(kwargs["trace_level"], "standard")
             self.assertEqual(kwargs["audit_router_mode"], "shadow")
             self.assertEqual(kwargs["audit_router_threshold"], .65)
             pipeline = SimpleNamespace(name="test-pipeline", baseintent_optimization_config={
-                "framework_version": "three-layer-v1", "input_isolation": False,
+                "framework_version": "BaseIntent", "framework_revision": "intent-modules-v1",
                 "authorization_precheck": False, "use_security_checker": True})
             main = SimpleNamespace(total_prompt_tokens=80, total_completion_tokens=20, get_total_tokens=lambda:100)
             sec = SimpleNamespace(total_prompt_tokens=30, total_completion_tokens=10, get_total_tokens=lambda:40)
@@ -183,7 +181,7 @@ class DashboardEvaluationTests(unittest.TestCase):
                     self.assertTrue((Path(directory)/'worker-test'/name).is_file(),name)
                 self.assertEqual(saved["aggregate_metrics"]["total_tokens"], 140)
                 self.assertIsNone(saved["aggregate_metrics"]["avg_attack_success_rate"])
-                self.assertFalse(saved["suites"][0]["framework"]["input_isolation"])
+                self.assertFalse(saved["suites"][0]["framework"]["authorization_precheck"])
             finally:
                 runs_store.pop("worker-test", None)
 

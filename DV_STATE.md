@@ -1,6 +1,34 @@
 # BaseIntent Project State
 
-更新：2026-11-20（Asia/Shanghai）。本文件记录本项目的当前状态和历史核验，恢复时与代码／Git 交叉核对。
+更新：2026-11-24（Asia/Shanghai）。本文件记录本项目的当前状态和历史核验，恢复时与代码／Git 交叉核对。
+
+## 动态规划研究路线（2026-11-24）
+
+- 已对照本地 `research/Ideas/baseIntent` 笔记与现有源码更新 [idea.md](idea.md)。近期先筛选原授权下的可行续程与额外权限必要性，后续再考虑审批等待和批准后复验。
+- 本次为文档更新。动态规划、权限增量与跨版本复验均为待验证方案。框架现状引用 11-24 已有 clean 记录，无新增评测调用。
+
+## Authorization 与 Audit 协议更新（2026-11-24）
+
+- 参考 GrantBind `579848e`。当前 `provider=openai` 第一阶段使用固定字段 strict JSON Schema。`condition` 在条件类目标为非空字符串，其余为 `null`，并保留到进度使用的意图文本。`BASEINTENT_OPENAI_TASK_VIEW_FORMAT=json_object` 对照只切换传输格式。实际协议与摘要进入运行清单。
+- Audit 默认 v5，使用 595 字符提示、最近 10 条动作记录，区分明确顺序冲突与未知前置事件。`BASEINTENT_AUDIT_PRESENTATION=v4` 提供对照。`--strict 1` 保持默认拦截 abstain，`--strict 0` 在 Monitor 检查通过后才放行有效 abstain。策略进入运行标识与清单，续跑沿用原模式。
+- OpenAI 请求格式、条件校验、Audit v5、执行策略及清单续跑由离线用例核验。最终 Qwen3.7-Flash clean 9 个有效案例，效用 7/9，任务错误 0，81 次调用、159,367 Token、未知 usage 0。未测在线 ASR、OpenAI 提供方或宽松模式。详见 `artifacts/20261124_grantbind_protocols/verification.md`。
+
+## 框架模块调整（2026-11-21）
+
+- 默认防御移除 L1 来源封装、交易投影及其运行选项。规划器收到原生工具消息，旧 L1 结果字段可读。Authorization 编译冻结权限，Precheck 校验整批，Audit 审计候选，Intent Progress 核验证据并推进，Reference Monitor 介导执行。
+- 共享工厂、full/partial CLI、Dashboard 和[框架文档](docs/reference/framework.md)同步。防御配置与缓存使用 `intent-modules-v1`。新轨迹区分 Authorization、Precheck、Audit、Intent Progress 和 Monitor。
+- 框架和原生进度回归 16 项、Dashboard Python 50 项、Node 54 项通过。AgentDojo 完整套件仍有基线失败和错误，逐项对照无新增。新 SVG 已渲染核对组件与回流。
+- AgentDojo Qwen3.7-Flash 实测 9 个有效 clean 案例，效用 7/9，任务错误 0。81 次调用、149,918 Token、未知 usage 0。未测在线 ASR。命令、回归基线和图稿核验见 `artifacts/20261121_framework_modules/verification.md`。
+
+## 执行路径示意图后处理（2026-11-21）
+
+- 已实现：原始生图保留。Real-ESRGAN 2× PNG、可编辑 SVG 和印刷 PDF、PNG 存于 `docs/figures/framework-execution/`，框架文档嵌入 SVG。
+- 已核验：对照检查超分和矢量校样，核对图中文字、箭头、文档链接、PDF 页宽、字体嵌入和 PNG 尺寸。本次仅改图稿与文档，未运行评测。记录见 `artifacts/20261121_framework_figure_postprocess/verification.md`。
+
+## 执行路径示意图精简（2026-11-21）
+
+- 已实现：参考 GrantBind 图的三分区和图标卡片，用内置 ImageGen 重绘 BaseIntent 流程。精简 L2、L3 和票据标签及执行路径图注，覆盖现有提示词与 PNG。
+- 已核验：检查图中文字、免审分支、执行和回流箭头，验证 2022×778 PNG、相对链接、三轮提示词及文档改动范围。本次未运行评测。证据见 `artifacts/20261121_framework_figure_refresh/verification.md`。
 
 ## GrantBind 框架对照与 L3 证据预算（2026-11-20）
 
@@ -14,6 +42,11 @@
 - 已实现：依据当前 README、框架文档与核心源码绘制 `docs/figures/system-architecture.html` 并导出 SVG；仅文档图示，无防御行为或模型调用变更。
 - 已核验：技能自检和 SVG 导出通过，SVG 可解析；按用户指定的 sharp 路径导出 3200×1800 PNG 并检查图面。浏览器安全策略禁止打开本地 HTML，几何检查脚本在已安装技能中缺失。记录见 `artifacts/20261029_system_architecture/verification.md`。
 - 下一步：根据需要在目标论文或幻灯片中检查缩放后的可读性。
+
+## 执行路径示意图（2026-11-20）
+
+- 已实现：依据当前框架文档和源码生成提示词，以内置 ImageGen 生成 1840×855 PNG，替换 `docs/reference/framework.md` 的执行路径 Mermaid。提示词与 PNG 均在 `docs/figures/`。
+- 已核验：逐项检查图中文字与箭头方向，核对文档相对链接、PNG 文件头、尺寸及文档改动范围。未修改运行时代码或执行评测。证据见 `artifacts/20261120_framework_execution_figure/verification.md`。
 
 ## 当前身份
 
@@ -77,7 +110,7 @@
 
 ## 当前实现
 
-L1来源视图和有限银行投影；L2两次调用、无损准备归并、冻结全局工具与固定ID键进度关联；宿主事件／语义进度；L3有限四字段审计；Monitor整批回执与一次性票据。详细行为和限制以 [框架](docs/reference/framework.md) 为准。
+Authorization 两次调用、无损归并准备项和冻结全局工具。Precheck 做整批校验，Audit 使用有限四字段判决，Intent Progress 结合宿主证据与语义条件推进。Planner 接收原生工具消息，Monitor 核验整批回执和一次性票据。详见[框架](docs/reference/framework.md)。
 
 公开／internal有效读取在所有模式固定免审，不按sink、URL或对象隐私过滤；personal／secret读取及效果仍审计。自动完成只限于已审核的有界单次直接邀请模式；复杂／未知目标仍需语义判断。
 

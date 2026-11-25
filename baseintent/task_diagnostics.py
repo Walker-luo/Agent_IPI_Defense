@@ -106,8 +106,8 @@ class DiagnosticSession:
 
     def emit(self, event, record, **metadata):
         record = deepcopy(record)
-        module = {'authorization':'L2', 'audit_decision':'L3', 'audit_decision_final':'L3',
-                  'audit_router':'L3', 'intent_progress':'Intent Progress'}.get(event)
+        module = {'authorization':'Authorization', 'audit_decision':'Audit', 'audit_decision_final':'Audit',
+                  'audit_router':'Audit', 'intent_progress':'Intent Progress'}.get(event)
         if module: metadata['module'] = module
         phase = 'audit' if event in ('audit_decision','audit_decision_final') else 'intent_progress' if event == 'intent_progress' else None
         host_progress = event == 'intent_progress' and any(
@@ -159,7 +159,7 @@ class DiagnosticSession:
             self.response_refs[phase] = dict(path=self.response_path.name, offset=offset,
                 response_id=record['response_id'])
             self._write('response',dict(phase=phase),response_ref=self.response_refs[phase],
-                module='L3' if phase == 'audit' else 'Intent Progress')
+                module='Audit' if phase == 'audit' else 'Intent Progress')
         except (OSError,TypeError,ValueError) as exc:
             raise DiagnosticWriteError('DIAGNOSTIC_WRITE_FAILED') from exc
 
@@ -189,9 +189,7 @@ class DiagnosticSession:
             record = {k:v for k,v in record.items() if (not k.endswith(('_sha256','_hash','_fingerprint'))
                       or k in ('artifact_sha256','model_config_sha256'))
                       and k not in ('router_schema','feature_version','features','tool_schema_hash','contract_version')}
-            self._write('audit_router',record,router_index=index,module='L3')
-        l1 = {k:self.latest.pop(k) for k in ('baseintent_input_isolation','baseintent_l1_projection') if k in self.latest}
-        if l1:self._write('l1_summary',l1,module='L1')
+            self._write('audit_router',record,router_index=index,module='Audit')
         self.latest.pop('baseintent_trace_level',None)
         status = ('infrastructure_error' if failed or self.latest.get('baseintent_infrastructure_failure') else
                   self.latest.get('baseintent_termination',{}).get('kind','finished'))
@@ -250,7 +248,7 @@ def record_validation(phase, status, *, diagnostics=None):
     if session is not None and status != 'passed':
         session.emit('validation',dict(response_id=session.responses.get(phase),
             phase=phase,status=status,diagnostics=diagnostics or {}),
-            module='L3' if phase == 'audit' else 'L2' if phase.startswith('authorization') else 'Intent Progress')
+            module='Audit' if phase == 'audit' else 'Authorization' if phase.startswith('authorization') else 'Intent Progress')
 
 
 def load_diagnostic_events(path, *, offset=0):

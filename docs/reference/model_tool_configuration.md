@@ -32,8 +32,8 @@ model_id = "qwen3.7-flash"
 
 | 当前变量 | 用途 |
 | --- | --- |
-| `BASEINTENT_MAIN_MODEL_ID/PROVIDER/BASE_URL/API_KEY/API_KEY_ENV` | 主模型、L2 与语义 progress |
-| `BASEINTENT_SEC_MODEL_ID/PROVIDER/BASE_URL/API_KEY/API_KEY_ENV` | L3 审计模型 |
+| `BASEINTENT_MAIN_MODEL_ID/PROVIDER/BASE_URL/API_KEY/API_KEY_ENV` | 主模型、Authorization 与 Intent Progress |
+| `BASEINTENT_SEC_MODEL_ID/PROVIDER/BASE_URL/API_KEY/API_KEY_ENV` | Audit 模型 |
 | `BASEINTENT_TOOL_METADATA` | 显式风险目录 |
 | `BASEINTENT_TRACE_LEVEL` | summary / standard / full |
 | `BASEINTENT_FORCE_RERUN` | 显式强制重跑；`--reuse` 覆盖它 |
@@ -61,18 +61,22 @@ model_id = "qwen3.7-flash"
 | 选项 | 默认 / 作用 |
 | --- | --- |
 | `--prompt-profile legacy` | 当前 BaseIntent 流程；历史显式 profile 保持原义 |
-| `--l1-projection-mode` | 当前 full/partial CLI 默认 off；API/factory 默认 projected。off 保留来源封装，shadow 仅观察，projected 启用有界投影 |
 | `--audit-router-mode` | 防御 CLI shadow；baseline/NoChecker off；API/factory off |
 | `--audit-router-threshold 0.70` | 诊断与配置绑定，不调节固定免审 |
+| `--strict {0,1}` | 默认 `1` 拦截 abstain。当前 profile 的 `0` 放行通过 Monitor 校验的有效 abstain。Python/API 字段为 `l3_strict` |
+| `BASEINTENT_OPENAI_TASK_VIEW_FORMAT` | `provider=openai` 当前默认 `json_schema`。设为 `json_object` 切换第一阶段传输格式 |
+| `BASEINTENT_AUDIT_PRESENTATION` | 当前默认 `v5`，最近 10 条动作记录。设为 `v4` 恢复此前提示词和 32 条上限 |
 | `--audit-retries 0` | 默认无语义重审；显式支持 0/1 |
 | `--trace-level summary` | standard/full 增加诊断细节，不改变原生评分 |
-| `--no-checker` | 保留 L2/进度与执行监控，关闭语义动作审计 |
+| `--no-checker` | 关闭 Audit，保留 Authorization、Precheck、Intent Progress 和执行监控 |
 | `--no-tool-view` | 规划展示完整目录，保留执行授权检查 |
 | `--no-delegated-tasks` | 关闭明确任务来源展开 |
 | `--completion-prompt` | 显式启用通用完成提示；默认关闭 |
 
-### L3读取路由
+启动进程前设置环境变量。运行清单记录适用的 `task_view_response_format`、`task_view_request_sha256`、`audit_presentation` 和 `l3_strict`。同一运行续跑可省略 `--strict` 沿用原值，其他协议开关需与原清单一致。切换策略使用新的运行名。
 
-注册、已授权、schema 有效的 `effect=read` 且 public/internal 工具，在 off/shadow/selective 全部固定免审；不按 sink、URL 来源、查询串、内网形式或对象隐私过滤。personal/secret 和效果性动作仍审计。router off 不表示关闭 L3，shadow 也不会额外审计固定免审读取；阈值不改变此范围。非空旧 `--audit-router-artifact` 已停用并拒绝。详见[框架](framework.md)。
+### Audit 读取路由
+
+注册、已授权、schema 有效的 `effect=read` 且 public/internal 工具，在 off/shadow/selective 全部固定免审；不按 sink、URL 来源、查询串、内网形式或对象隐私过滤。personal/secret 和效果性动作仍审计。`off` 下 Audit 仍运行，shadow 也不会额外审计固定免审读取；阈值不改变此范围。非空旧 `--audit-router-artifact` 已停用并拒绝。详见[框架](framework.md)。
 
 full/partial/cohort 多攻击按独立 attack 进程运行，内部顺序保持；clean、单攻击、screen 顺序执行，无新增并发参数。Python API 调用应放在 `if __name__ == "__main__":` 保护内。新策略或有效配置使用新名称；不得用重命名迁移旧缓存或冻结名单。

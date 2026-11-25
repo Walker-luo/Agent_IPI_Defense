@@ -104,16 +104,16 @@ python -m experiments.run_benchmark --reuse --name baseintent_full_01 \
 | `--trace-level summary|standard|full` | 默认 `summary`，可由环境变量覆盖；增加诊断细节，不改变评分。 |
 | `--include-extra-info` | 兼容快捷开关，等同于 `--trace-level full`。 |
 | `--prompt-profile NAME` | 默认 `legacy`，即当前 BaseIntent；其他值为显式历史流程。 |
-| `--l1-projection-mode off|shadow|projected` | 当前 CLI 默认 `off`，保留来源封装；`shadow` 仅观察，`projected` 启用现有有界银行投影。 |
-| `--audit-router-mode off|shadow|selective` | BaseIntent CLI 默认 `shadow`，baseline／NoChecker 默认 `off`；`off` 不关闭 L3。 |
+| `--audit-router-mode off|shadow|selective` | BaseIntent CLI 默认 `shadow`，baseline／NoChecker 默认 `off`；`off` 下 Audit 仍启用。 |
 | `--audit-router-threshold FLOAT` | 默认 `0.70`，范围 `[0,1]`；仅用于诊断／配置绑定，不改变固定读取免审范围。 |
+| `--strict {0,1}` | 默认 `1`，拦截 abstain。当前 profile 的 `0` 放行通过 Monitor 检查的有效 abstain。续跑省略时沿用原值。 |
 | `--audit-retries 0|1` | 默认 `0`；设置语义 abstain 的有界重审次数。 |
-| `--no-checker` | 关闭语义动作审计，保留 L2／进度和执行监控。 |
+| `--no-checker` | 关闭 Audit，保留 Authorization、Precheck、Intent Progress 和执行监控。 |
 | `--no-tool-view` | 向规划器展示完整工具目录，保留执行授权检查。 |
 | `--no-delegated-tasks` | 关闭显式任务来源展开。 |
 | `--completion-prompt` | 启用通用完成提示，默认关闭。 |
 
-`--audit-router-artifact` 已停用，非空值会被拒绝。更详细的默认值与边界见[配置](reference/model_tool_configuration.md)。没有同名 NoL2 CLI 参数，完整消融可通过现有 API/Dashboard。
+`--audit-router-artifact` 已停用，非空值会被拒绝。更详细的默认值与边界见[配置](reference/model_tool_configuration.md)。可通过 API 或 Dashboard 关闭 Authorization。
 
 离线导出注册任务清单而不调用模型：
 

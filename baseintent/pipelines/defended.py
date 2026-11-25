@@ -34,15 +34,13 @@ from baseintent.decision_schema import (AUDIT_PROTOCOL, AUDIT_SCHEMA, action_sch
                                   contract_identity, validate_audit, DecisionContractError,
                                   load_decision_json)
 from baseintent.intent_evidence import (PROFILE as V35_PROFILE, AUTH_PROTOCOL as V35_AUTH_PROTOCOL,
-    AUDIT_PROTOCOL as V35_AUDIT_PROTOCOL, MAIN_TASK_POLICY, ISOLATION_POLICY, REVIEW_RULES, DECISION_GUIDE, ENVELOPE_SCHEMA, permission_schema, parse_permissions, parse_envelope, audit_request_options, audit_model_settings, audit_contract_identity, AUDIT_FORMAT)
-from baseintent.input_isolation import FRAMEWORK_VERSION, ISOLATION_RULE, build_isolated_view, framework_version_for_profile
+    AUDIT_PROTOCOL as V35_AUDIT_PROTOCOL, MAIN_TASK_POLICY, REVIEW_RULES, DECISION_GUIDE, ENVELOPE_SCHEMA, permission_schema, parse_permissions, parse_envelope, audit_request_options, audit_model_settings, audit_contract_identity, AUDIT_FORMAT)
+from baseintent.framework import MODULE_REVISION, framework_version_for_profile
 from baseintent import task_diagnostics as diagnostics
-from baseintent.failure_policy import FAILURE_POLICY, MODULE_NAMES, block_error, is_blocked_error
+from baseintent.failure_policy import FAILURE_POLICY, MODULE_NAMES, block_error, is_blocked_error, validate_l3_strict
 import warnings
-from baseintent.l1_projection import (MODES as L1_PROJECTION_MODES, PROFILE_SHA256 as L1_PROFILE_SHA256,
-                               PROFILE as L1_PROFILE, trusted_request_for_view)
-from baseintent.l2_authorization import (catalog_fingerprint, planning_runtime_view,
-                                  ToolAuthorizationProfile, L2AuthorizationError,
+from baseintent.authorization import (catalog_fingerprint, planning_runtime_view,
+                                  ToolAuthorizationProfile, AuthorizationError,
                                   validate_profile_decision, DelegatedTaskReader,
                                   EffectiveTaskContext, match_delegated_task,
                                   resolve_delegated_task, effective_delegated_task, DELEGATION_VERSION)
@@ -52,7 +50,8 @@ from baseintent.audit_router import (LocalAuditRouter, RouterReceiptVerifier, ar
                                validate_router_options)
 from baseintent.audit_context import (INPUT_SCHEMA as AUDIT_INPUT_SCHEMA_VERSION,
                                 ADAPTIVE_EVIDENCE_VERSION, EVIDENCE_VERSION, EXPANDED_FACT_BUDGET,
-                                FACT_BUDGET, MAX_RESULTS, MAX_CALL_ARGUMENTS, select_tool_evidence)
+                                AUDIT_V5_HISTORY, FACT_BUDGET, MAX_RESULTS, MAX_CALL_ARGUMENTS,
+                                audit_presentation, select_tool_evidence)
 from baseintent.prompt_profiles import (validate_profile, semantic_catalog, audit_policy,
                                   authorization_policy, profile_binding, CATALOG_SCHEMA)
 from baseintent.model_config import (
@@ -818,11 +817,9 @@ def _sync_trace_context(extra_args: dict) -> None:
         "baseintent_audit_summary": _audit_summary(audits),
         "baseintent_action_summary": _action_summary(actions),
     }
-    for key in ("baseintent_input_isolation", "baseintent_l1_projection", "baseintent_layer_routing", "baseintent_framework", "baseintent_router_events", "baseintent_l2", "baseintent_audit_evidence", "baseintent_intent_flow", "baseintent_termination", "baseintent_infrastructure_failure"):
+    for key in ("baseintent_layer_routing", "baseintent_framework", "baseintent_router_events", "baseintent_l2", "baseintent_audit_evidence", "baseintent_intent_flow", "baseintent_termination", "baseintent_infrastructure_failure"):
         if key in extra_args:
             context[key] = deepcopy(extra_args[key])
-            if key == 'baseintent_l1_projection' and level != 'full':
-                context[key].pop('profile_sha256', None)
     if diagnostics.current_session() is not None:
         diagnostics.sync_context(context)
         return
@@ -1207,7 +1204,7 @@ class ToolAuthorizationCompiler:
             if profile.matches(request.text):
                 try:
                     profile.validate_runtime(runtime)
-                except L2AuthorizationError as exc:
+                except AuthorizationError as exc:
                     raise AuthorizationCompilationError(exc.reason_code) from exc
                 profile_status = 'applied'
             else:
@@ -1355,7 +1352,7 @@ class ToolAuthorizationCompiler:
             try:
                 selected, prohibited, prepared, evidence_refs = validate_profile_decision(
                     result_json, request.text, runtime, profile)
-            except L2AuthorizationError as exc:
+            except AuthorizationError as exc:
                 raise AuthorizationCompilationError(exc.reason_code) from exc
             allowed = set(selected)
             implicit_reads = frozenset(name for name in allowed if metadata[name].metadata.deterministic_read)
@@ -1422,12 +1419,11 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         sandbox=None,
         trace_level: str = DEFAULT_TRACE_LEVEL,
         tool_metadata=None,
-        input_isolation: bool = True,
+        *,
         planning_tool_view: bool = True,
         authorization_profile=None,
         delegated_tasks: bool = True,
         delegated_task_reader=None,
-        l1_projection_mode: str = 'projected',
         prompt_profile: str = 'legacy',
     ):
         self.llm = llm
@@ -1438,10 +1434,6 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         self.trace_level = _normalise_trace_level(trace_level)
         self._authorization_cache_key = None
         self._authorization_cache_contract = None
-        self.input_isolation = input_isolation
-        if not isinstance(l1_projection_mode, str) or l1_projection_mode not in L1_PROJECTION_MODES:
-            raise ValueError('invalid L1 projection mode')
-        self.l1_projection_mode = l1_projection_mode if input_isolation else 'off'
         self.planning_tool_view = planning_tool_view
         self.on_authority_replaced = None
         if delegated_task_reader is not None and not isinstance(delegated_task_reader, DelegatedTaskReader):
@@ -1456,7 +1448,7 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         self.intent_flow = None
 
     @staticmethod
-    def _l2_count(extra_args, key, amount=1):
+    def _authorization_count(extra_args, key, amount=1):
         stats = extra_args.setdefault('baseintent_l2', {})
         stats[key] = stats.get(key, 0) + amount
 
@@ -1494,7 +1486,7 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
                        + spec.source_name + ' with ' + spec.tool_name + ' and host-resolved arguments '
                        + spec.arguments_json + '. Business actions are not authorized yet.')
         if len(_normalise_text(preparation, AUDIT_MAX_REQUEST_LENGTH)) > AUDIT_MAX_REQUEST_LENGTH:
-            raise L2AuthorizationError('DELEGATED_TASK_INPUT_TOO_LONG')
+            raise AuthorizationError('DELEGATED_TASK_INPUT_TOO_LONG')
         self._task_context = EffectiveTaskContext(request, preparation, catalog_fingerprint(runtime),
                                                   'preparation', spec, call_id)
         status = metadata[spec.tool_name]
@@ -1509,7 +1501,7 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
             authorization_mode='delegation-preparation-v1',
             authorization_source='trusted_user+explicit_task_source', task_phase='preparation')
         self._publish_grant(grant, extra_args)
-        self._l2_count(extra_args, 'bootstrap_reads')
+        self._authorization_count(extra_args, 'bootstrap_reads')
         call = functions_runtime.FunctionCall(function=spec.tool_name, args=spec.arguments, id=call_id)
         proposal = ad_types.ChatAssistantMessage(role='assistant', content=[], tool_calls=[call])
         return preparation, proposal
@@ -1519,18 +1511,18 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         matching = [m for m in messages if isinstance(m, dict) and m.get('role') == 'tool'
                     and m.get('tool_call_id') == context.bootstrap_call_id]
         if len(matching) != 1 or matching[0].get('error'):
-            raise L2AuthorizationError('DELEGATED_SOURCE_READ_FAILED')
+            raise AuthorizationError('DELEGATED_SOURCE_READ_FAILED')
         message = matching[0]
         call = message.get('tool_call')
         if (call is None or _tool_call_name(call) != context.source.tool_name
                 or _tool_call_args(call) != context.source.arguments):
-            raise L2AuthorizationError('DELEGATED_SOURCE_NOT_MEDIATED')
+            raise AuthorizationError('DELEGATED_SOURCE_NOT_MEDIATED')
         arguments_hash = sha256(json.dumps(context.source.arguments, sort_keys=True,
                                            ensure_ascii=False, default=str).encode()).hexdigest()
         if not any(r['call_id'] == context.bootstrap_call_id and r['state'] == 'executed'
                    and r['tool_name'] == context.source.tool_name and r['arguments_sha256'] == arguments_hash
                    for r in _get_action_ledger(extra_args).snapshot()):
-            raise L2AuthorizationError('DELEGATED_SOURCE_NOT_MEDIATED')
+            raise AuthorizationError('DELEGATED_SOURCE_NOT_MEDIATED')
         content = message.get('content') or []
         serialized = content if isinstance(content, str) else ad_types.get_text_content_as_str(content)
         task_text = context.source.task_text(serialized)
@@ -1539,18 +1531,18 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         self.sandbox.allowed_tools = None
         if self.on_authority_replaced is not None:
             self.on_authority_replaced()
-        self._l2_count(extra_args, 'authorization_compilations')
+        self._authorization_count(extra_args, 'authorization_compilations')
         grant = self.authorization_compiler.compile(TrustedTaskRequest(effective), runtime)
         grant = replace(grant, authorization_source='trusted_user+explicit_delegated_task')
         self._publish_grant(grant, extra_args)
-        self._l2_count(extra_args, 'delegated_tasks_expanded')
+        self._authorization_count(extra_args, 'delegated_tasks_expanded')
 
     def query(self, query, runtime, env, messages, extra_args):
         try:
             return self._query(query, runtime, env, messages, extra_args)
         except flow.IntentFlowError as exc:
             if not exc.is_framework_failure: raise
-            module = 'L2' if exc.stage.startswith('authorization') else 'Intent Progress'
+            module = 'Authorization' if exc.stage.startswith('authorization') else 'Intent Progress'
             termination = dict(kind='framework_failure', module=module,
                 reason_code=exc.reason_code, diagnostics=exc.diagnostics)
             extra_args['baseintent_termination'] = termination
@@ -1608,7 +1600,7 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
                 if authorization_reused:
                     grant = self._authorization_cache_contract
                 else:
-                    self._l2_count(extra_args, 'authorization_compilations')
+                    self._authorization_count(extra_args, 'authorization_compilations')
                     grant = self.authorization_compiler.compile(TrustedTaskRequest(user_text), runtime)
                     self._authorization_cache_key = cache_key
                     self._authorization_cache_contract = grant
@@ -1645,8 +1637,8 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
         elif (self.sandbox is not None and self.sandbox.contract is not None
               and self.sandbox.contract.runtime_catalog_sha256
               and self.sandbox.contract.runtime_catalog_sha256 != catalog_fingerprint(runtime)):
-            self._task_failure(L2AuthorizationError('AUTH_CATALOG_CHANGED'), extra_args)
-            self._l2_count(extra_args, 'catalog_change_denials')
+            self._task_failure(AuthorizationError('AUTH_CATALOG_CHANGED'), extra_args)
+            self._authorization_count(extra_args, 'catalog_change_denials')
         elif self._task_context is not None and self._task_context.stage == 'preparation':
             try:
                 self._finish_delegation(runtime, messages, extra_args)
@@ -1658,31 +1650,6 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
 
         # FunctionCall candidates can never be fed back into authorization.
         model_messages = messages
-        if self.input_isolation:
-            projection_request = trusted_request_for_view(messages, self._task_context)
-            model_messages, stats = build_isolated_view(messages, runtime, trusted_request=projection_request,
-                                                        projection_mode=self.l1_projection_mode,
-                                                        isolation_rule=ISOLATION_POLICY if self.authorization_compiler.prompt_profile == V35_PROFILE else ISOLATION_RULE)
-            accumulated = extra_args.setdefault("baseintent_input_isolation", {
-                "schema_version": stats["schema_version"], "model_requests": 0,
-                "tool_results_rendered": 0, "escaped_results_rendered": 0,
-                "added_characters_total": 0,
-            })
-            accumulated["model_requests"] += 1
-            accumulated["tool_results_rendered"] += stats["tool_results"]
-            accumulated["escaped_results_rendered"] += stats["escaped_results"]
-            accumulated["added_characters_total"] += stats["added_characters"]
-            projected = extra_args.setdefault('baseintent_l1_projection', {
-                'mode': self.l1_projection_mode, 'profile': L1_PROFILE, 'profile_sha256': L1_PROFILE_SHA256,
-                'fallback_reason_counts': {},
-            })
-            for key, value in stats['projection'].items():
-                if key == 'fallback_reason_counts':
-                    for reason, count in value.items():
-                        projected[key][reason] = projected[key].get(reason, 0) + count
-                elif isinstance(value, int):
-                    projected[key] = projected.get(key, 0) + value
-            _sync_trace_context(extra_args)
         if self._task_context is not None and self._task_context.stage == 'execution':
             model_messages = deepcopy(model_messages)
             for message in reversed(model_messages):
@@ -1690,7 +1657,7 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
                     # Augment the view of the actual delegating user turn, never its raw history.
                     message['content'] = [ad_types.text_content_block_from_string(query)]
                     break
-            self._l2_count(extra_args, 'effective_task_added_characters_total',
+            self._authorization_count(extra_args, 'effective_task_added_characters_total',
                            max(0, len(query) - len(self._task_context.original_request)))
         planning_runtime = runtime
         counts = {'catalog_tools': len(runtime.functions), 'visible_tools': len(runtime.functions)}
@@ -1698,9 +1665,9 @@ class OurFrameExecutor(agent_pipeline.BasePipelineElement):
             planning_runtime, counts = planning_runtime_view(runtime, self.sandbox.allowed_tools,
                 preserve_order=self.authorization_compiler.prompt_profile == V35_PROFILE)
         if self.sandbox is not None:
-            self._l2_count(extra_args, 'planning_requests')
-            self._l2_count(extra_args, 'catalog_tools_total', counts['catalog_tools'])
-            self._l2_count(extra_args, 'visible_tools_total', counts['visible_tools'])
+            self._authorization_count(extra_args, 'planning_requests')
+            self._authorization_count(extra_args, 'catalog_tools_total', counts['catalog_tools'])
+            self._authorization_count(extra_args, 'visible_tools_total', counts['visible_tools'])
             _sync_trace_context(extra_args)
         if self.intent_flow is not None:
             if messages and messages[-1].get('role') == 'tool' and self.intent_flow.current:
@@ -2086,7 +2053,9 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
 
     def __init__(self, sandbox: PermissionSandbox | None, require_audit: bool,
                  precheck: ToolAuthorizationPrecheck | None = None,
-                 audit_router=None, router_verifier=None, intent_read_policy=False, intent_flow_getter=None):
+                 audit_router=None, router_verifier=None, intent_read_policy=False, intent_flow_getter=None,
+                 *, l3_strict=1):
+        self.l3_strict = validate_l3_strict(l3_strict)
         self.intent_read_policy = intent_read_policy
         self.intent_flow_getter = intent_flow_getter
         self.sandbox = sandbox
@@ -2231,7 +2200,7 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
             mediation['failure_stage'] = ('model_request' if audit.get('reason_code') in (
                 'AUDIT_MODEL_ERROR', 'AUDIT_TIMEOUT') else 'model_protocol')
         if mediation['failure_stage'] == 'model_request':
-            extra_args['baseintent_infrastructure_failure'] = dict(module='L3',
+            extra_args['baseintent_infrastructure_failure'] = dict(module='Audit',
                 reason_code=audit['reason_code'], stage='audit')
         if self.router_verifier is not None:
             self.router_verifier.discard(router_token)
@@ -2264,15 +2233,15 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
             tool_name = _tool_call_name(call)
             if precheck_result is not None and precheck_result.rejected:
                 reason = precheck_result.denial_reasons[index] or "BATCH_AUTHORIZATION_DENY"
-                reject('Monitor' if reason == 'PRECHECK_MISSING_OR_STALE' else 'L2', reason)
+                reject('Monitor' if reason == 'PRECHECK_MISSING_OR_STALE' else 'Precheck', reason)
                 continue
             if tool_name not in runtime.functions:
-                reject('L2', 'UNKNOWN_TOOL')
+                reject('Monitor', 'UNKNOWN_TOOL')
                 continue
             if self.sandbox is not None:
                 allowed, reason_code = self.sandbox.assess(tool_name, runtime)
                 if not allowed:
-                    reject('L2', reason_code)
+                    reject('Monitor', reason_code)
                     continue
             if flow_record:
                 if current_flow is not None and current_flow.current is None:
@@ -2288,8 +2257,7 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
                     continue
             # A semantic audit is supplementary: it can deny a deterministic
             # allow, but an allow can never bypass the Sandbox above. When the
-            # checker is enabled, an invalid/missing/abstaining audit defaults
-            # to deny for this (potentially state-changing) candidate.
+            # checker is enabled, invalid or missing audits are blocked.
             if audit_valid and audit.get("decision") == "deny":
                 status = metadata.get(tool_name)
                 # Reading a local/private source is not itself an external
@@ -2305,10 +2273,15 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
                 ):
                     decisions.append((action_id, call, True, "READ_ONLY_SOURCE_ALLOW"))
                 else:
-                    reject('L3', 'AUDIT_DENY', audit.get('reason_code'))
+                    reject('Audit', 'AUDIT_DENY', audit.get('reason_code'))
                 continue
             if self.require_audit and (not audit_valid or audit.get("decision") != "allow"):
                 if audit_valid and audit.get("decision") == "abstain":
+                    if (self.l3_strict == 0 and flow_record and audit.get('parser_status') == 'ok'
+                            and audit['reason_code'] == 'MISSING_EVIDENCE'
+                            and list(audit['violations']) == ['MISSING_EVIDENCE']):
+                        decisions.append((action_id, call, True, 'AUDIT_ABSTAIN_ALLOW'))
+                        continue
                     reason = "AUDIT_ABSTAIN"
                 else:
                     reason = (
@@ -2316,8 +2289,8 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
                         if isinstance(audit, dict) and audit.get("batch_fingerprint") == fingerprint
                         else "AUDIT_MISSING_OR_STALE"
                     )
-                origin = 'L3' if audit_valid or mediation.get('failure_stage') in ('model_protocol','model_request') else 'Monitor'
-                reject(origin, reason, audit.get('reason_code') if origin == 'L3' and isinstance(audit,dict) else reason)
+                origin = 'Audit' if audit_valid or mediation.get('failure_stage') in ('model_protocol','model_request') else 'Monitor'
+                reject(origin, reason, audit.get('reason_code') if origin == 'Audit' and isinstance(audit,dict) else reason)
                 continue
             decisions.append((action_id, call, True, "POLICY_ALLOW"))
 
@@ -2348,7 +2321,8 @@ class ReferenceMonitor(agent_pipeline.BasePipelineElement):
             final_record.update({
                 "final_policy_decision": "allow" if approved_count == len(pending_actions) else "deny",
                 "final_reason_code": (
-                    "POLICY_ALLOW"
+                    ('AUDIT_ABSTAIN_ALLOW' if any(a.reason_code == 'AUDIT_ABSTAIN_ALLOW' for a in pending_actions)
+                     else 'POLICY_ALLOW')
                     if approved_count == len(pending_actions)
                     else next(
                         action.reason_code
@@ -2475,8 +2449,8 @@ class TicketedToolsExecutor(agent_pipeline.BasePipelineElement):
                 allowed_now, current_reason = self.monitor.sandbox.assess(_tool_call_name(action.call), runtime)
                 if not allowed_now:
                     ledger.transition(action.action_id, ActionState.FAILED, current_reason)
-                    ledger.block_origin(action.action_id,'L2',current_reason)
-                    results.append(self._blocked_result(replace(action,blocked_by='L2',block_reason=current_reason), current_reason))
+                    ledger.block_origin(action.action_id,'Monitor',current_reason)
+                    results.append(self._blocked_result(replace(action,blocked_by='Monitor',block_reason=current_reason), current_reason))
                     continue
             if not consumed:
                 if (ticket_reason == "INVALID_EXECUTION_TICKET"
@@ -2672,7 +2646,10 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
         self.audit_router = audit_router
         self.router_verifier = router_verifier
         self.prompt_profile = validate_profile(prompt_profile)
-        self.SYSTEM_POLICY = audit_policy(type(self).SYSTEM_POLICY if self.prompt_profile in ('legacy', 'legacy-v34') else type(self).CLASSIC_POLICY, self.prompt_profile)
+        self.audit_presentation = audit_presentation(self.prompt_profile)
+        self.SYSTEM_POLICY = audit_policy(
+            type(self).SYSTEM_POLICY if self.prompt_profile in ('legacy', 'legacy-v34') else type(self).CLASSIC_POLICY,
+            self.prompt_profile, presentation=self.audit_presentation)
 
     def _handoff_record(self,query,runtime,calls,messages,extra_args,record):
         # Active routing authenticates every checker outcome, so a public
@@ -2711,7 +2688,9 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
         records = extra_args.get("baseintent_action_ledger", [])
         if not isinstance(records, list):
             records = []
-        bounded_records = records[-AUDIT_MAX_HISTORY_RECORDS:]
+        v5 = self.audit_presentation == 'v5' and not getattr(self, '_legacy_audit_input', False)
+        history_limit = AUDIT_V5_HISTORY if v5 else AUDIT_MAX_HISTORY_RECORDS
+        bounded_records = records[-history_limit:]
         history = []
         for record in bounded_records:
             if not isinstance(record, dict):
@@ -2727,6 +2706,9 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
                     if isinstance(item, dict)
                 ],
             })
+            if v5:
+                history[-1]['tool_call_id'] = _normalise_text(record.get('call_id', ''), 96)
+                history[-1]['intent_id'] = _normalise_text(record.get('intent_id', ''), 96)
         current_actions = []
         for call in tool_calls:
             raw_args = _tool_call_args(call)
@@ -2815,7 +2797,9 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
         if intent_context:
             active_flow = self.intent_flow_getter() if self.intent_flow_getter else None
             current = active_flow.current if active_flow is not None else None
-            packet['schema_version'] = 'baseintent.audit-input.intent-flow.v2'
+            packet['schema_version'] = 'baseintent.audit-input.intent-flow.v5' if v5 else 'baseintent.audit-input.intent-flow.v2'
+            if v5:
+                packet['user_visible_delivery_observable'] = False
             packet['current_goal_kind'] = current['goal_kind'] if current else None
             packet['original_user_request'] = query
             packet['current_intent'] = current['intent'] if current else None
@@ -2823,7 +2807,7 @@ class ActionSecurityChecker(agent_pipeline.BasePipelineElement):
             if current:
                 packet['trusted_user_request'] = current['intent']
             else:
-                packet['intent_context'] = 'no_l2_intent_contract'
+                packet['intent_context'] = 'no_intent_contract'
         return packet
 
     def _fallback_query(self, query, env, prompt: str):
@@ -3237,10 +3221,10 @@ TASK_COMPLETION_PROMPT = (
 )
 
 
-def router_configuration_hash(main_config, sec_config, *, input_isolation, authorization_precheck,
-                              l1_projection_mode, planning_tool_view, delegated_tasks,
+def router_configuration_hash(main_config, sec_config, *, authorization_precheck,
+                              planning_tool_view, delegated_tasks,
                               profile_hash=None, reader_hash=None, audit_retries=0, completion_prompt=False,
-                              prompt_profile='legacy', audit_router_threshold=None, use_sandbox=True):
+                              prompt_profile='legacy', audit_router_threshold=None, use_sandbox=True, l3_strict=1):
     """Describe the router request/configuration identity without creating clients."""
     authorization_policy_profile = ('legacy-v34' if profile_hash is not None
         and prompt_profile in ('legacy', V35_PROFILE) else prompt_profile)
@@ -3261,6 +3245,12 @@ def router_configuration_hash(main_config, sec_config, *, input_isolation, autho
     if prompt_profile == 'legacy':
         evidence_version = ADAPTIVE_EVIDENCE_VERSION
         evidence_bounds.append(EXPANDED_FACT_BUDGET)
+    presentation = audit_presentation(prompt_profile)
+    history_limit = AUDIT_V5_HISTORY if presentation == 'v5' else AUDIT_MAX_HISTORY_RECORDS
+    audit_input = ('baseintent.audit-input.intent-flow.' + ('v5' if presentation == 'v5' else 'v2')
+                   if prompt_profile == 'legacy' else
+                   'baseintent.audit-input.v5.10' if prompt_profile == V35_PROFILE else
+                   'baseintent.audit-input.v4' if prompt_profile == 'legacy-v34' else AUDIT_INPUT_SCHEMA_VERSION)
     return router_digest({**({'decision_contracts': decision_contracts} if decision_contracts else {}), **({"router_policy_version": ROUTER_POLICY_VERSION,
                                              "router_threshold": validate_router_options(audit_router_threshold),
                                              "router_scope": "ordinary-public-internal-read-batches-and-literal-public-web"}
@@ -3269,14 +3259,12 @@ def router_configuration_hash(main_config, sec_config, *, input_isolation, autho
                                            "temperature": 0.0,
                                            "reasoning_effort": [reasoning_effort_for_config(main_config),audit_model_settings(sec_config, prompt_profile).get('reasoning_effort')],
                                            "main_system_prompt_sha256": _hash_json(load_system_message(None)),
-                                           "audit_policy_sha256": _hash_json(audit_policy(ActionSecurityChecker.SYSTEM_POLICY if prompt_profile in ('legacy', 'legacy-v34') else ActionSecurityChecker.CLASSIC_POLICY, prompt_profile)),
+                                           "audit_policy_sha256": _hash_json(audit_policy(ActionSecurityChecker.SYSTEM_POLICY if prompt_profile in ('legacy', 'legacy-v34') else ActionSecurityChecker.CLASSIC_POLICY, prompt_profile, presentation=presentation)),
                                            "authorization_policy_sha256": _hash_json(authorization_policy(ToolAuthorizationCompiler.SYSTEM_POLICY if prompt_profile in ('legacy', 'legacy-v34') and profile_hash is None else ToolAuthorizationCompiler.CLASSIC_POLICY, authorization_policy_profile)),
-                                           "isolation_rule_sha256": _hash_json(ISOLATION_POLICY if prompt_profile == V35_PROFILE else ISOLATION_RULE),
                                            "completion_rule_sha256": _hash_json(TASK_COMPLETION_PROMPT),
                                            "framework_version": framework_version_for_profile(prompt_profile),
-                                           "input_isolation": input_isolation,"authorization_precheck": authorization_precheck,
-                                           'l1_projection_mode': l1_projection_mode,
-                                           'l1_projection_profile_sha256': L1_PROFILE_SHA256,
+                                           'framework_revision': MODULE_REVISION,
+                                           "authorization_precheck": authorization_precheck,
                                            'planning_tool_view': planning_tool_view, 'delegated_tasks': delegated_tasks,
                                            'authorization_profile_sha256': profile_hash,
                                            'delegated_task_reader_sha256': reader_hash,
@@ -3285,19 +3273,36 @@ def router_configuration_hash(main_config, sec_config, *, input_isolation, autho
                                            'delegated_task_protocol': DELEGATION_VERSION,
                                            "audit_retries": audit_retries,"completion_prompt": completion_prompt,
                                            "audit_timeout_seconds": AUDIT_TIMEOUT_SECONDS,
-                                           'audit_input_schema': 'baseintent.audit-input.v5.10' if prompt_profile == V35_PROFILE else 'baseintent.audit-input.v4' if prompt_profile in ('legacy', 'legacy-v34') else AUDIT_INPUT_SCHEMA_VERSION,
+                                           'audit_input_schema': audit_input,
+                                           'l3_strict': validate_l3_strict(l3_strict),
                                            'audit_evidence_version': evidence_version,
                                            'audit_evidence_bounds': evidence_bounds,
                                            "input_bounds": [AUDIT_MAX_REQUEST_LENGTH,AUDIT_MAX_TOOL_DESCRIPTION_LENGTH,
                                                             AUDIT_MAX_STRING_LENGTH,AUDIT_MAX_ARGUMENT_DEPTH,
-                                                            AUDIT_MAX_HISTORY_RECORDS,AUDIT_MAX_TOOL_RESULTS,AUDIT_MAX_TOOL_RESULT_LENGTH]})
+                                                            history_limit,AUDIT_MAX_TOOL_RESULTS,AUDIT_MAX_TOOL_RESULT_LENGTH]})
 
 
-def defended_pipeline_name(model_id, *, use_sandbox, use_security_checker, input_isolation,
-                           authorization_precheck, l1_projection_mode, planning_tool_view,
+def pipeline_protocol_binding(main_config, *, prompt_profile, use_sandbox, use_security_checker,
+                              l3_strict, bounded=False):
+    """Public protocol choices shared by the real and preflight pipelines."""
+    validate_l3_strict(l3_strict)
+    if l3_strict == 0 and (not use_security_checker or prompt_profile != 'legacy'):
+        raise ValueError('--strict 0 requires Audit and the current BaseIntent profile')
+    binding = {}
+    if prompt_profile == 'legacy' and use_sandbox and not bounded:
+        binding.update(flow.task_view_binding(main_config))
+    if use_security_checker:
+        binding['l3_strict'] = l3_strict
+        if prompt_profile == 'legacy':
+            binding['audit_presentation'] = audit_presentation(prompt_profile)
+    return binding
+
+
+def defended_pipeline_name(model_id, *, use_sandbox, use_security_checker,
+                           authorization_precheck, planning_tool_view,
                            delegated_tasks, audit_router_mode, audit_router=None,
                            router_config_hash=None, profile_hash=None, reader_hash=None,
-                           prompt_profile='legacy'):
+                           prompt_profile='legacy', protocol_binding=None):
     """Pure naming shared by preflight descriptors and actual pipelines."""
     # 5. 动态命名 Pipeline，方便看实验日志
     ablation_suffix = ""
@@ -3312,8 +3317,8 @@ def defended_pipeline_name(model_id, *, use_sandbox, use_security_checker, input
 
     # Native full-run caches are keyed by this name. Keep new views/gates
     # separate from historical V2 and from each other's API ablations.
-    version_suffix = (f"-{framework_version_for_profile(prompt_profile)}-L1{int(input_isolation)}-L2{int(authorization_precheck)}"
-                      f'-Projection{l1_projection_mode}-{L1_PROFILE_SHA256[:16]}'
+    version_suffix = (f"-{framework_version_for_profile(prompt_profile)}-{MODULE_REVISION}"
+                      f'-Precheck{int(authorization_precheck)}'
                       f'-View{int(planning_tool_view)}-Delegate{int(delegated_tasks)}')
     if profile_hash:
         version_suffix += '-Profile-' + profile_hash[:16]
@@ -3322,6 +3327,13 @@ def defended_pipeline_name(model_id, *, use_sandbox, use_security_checker, input
     name = f"{model_id}-newFrame{ablation_suffix}{version_suffix}"
     if profile_binding(prompt_profile):
         name += '-Prompt-' + prompt_profile + '-' + profile_binding(prompt_profile)['prompt_profile_sha256'][:16]
+    if protocol_binding:
+        if 'task_view_request_sha256' in protocol_binding:
+            name += '-TaskView-' + protocol_binding['task_view_request_sha256'][:16]
+        if 'l3_strict' in protocol_binding:
+            name += f"-AuditStrict{protocol_binding['l3_strict']}"
+        if 'audit_presentation' in protocol_binding:
+            name += '-AuditInput-' + protocol_binding['audit_presentation']
     if audit_router_mode != "off":
         name += f"-CSA-{audit_router_mode}-{audit_router.policy_version}-T{audit_router.threshold:g}-{router_config_hash[:16]}"
     return name
@@ -3336,7 +3348,8 @@ def make_qwen_newFrame_pipeline(
     tool_metadata=None,
     audit_retries: int = 0,
     completion_prompt: bool = False,
-    input_isolation: bool = True,
+    *,
+    l3_strict: int = 1,
     authorization_precheck: bool = True,
     audit_router_mode: str = "off",
     audit_router_artifact: str | Path | None = None,
@@ -3345,8 +3358,6 @@ def make_qwen_newFrame_pipeline(
     authorization_profile=None,
     delegated_tasks: bool = True,
     delegated_task_reader=None,
-    *,
-    l1_projection_mode: str = 'projected',
     prompt_profile: str = 'legacy',
     api_key: str | None = None,
     base_url: str | None = None,
@@ -3374,17 +3385,15 @@ def make_qwen_newFrame_pipeline(
     audit_router_threshold = validate_router_options(audit_router_threshold, audit_router_artifact)
     validate_profile(prompt_profile)
     if prompt_profile not in ('legacy', 'legacy-v34') and (not use_sandbox or not use_security_checker):
-        raise ValueError('candidate prompt profiles require L2 and checker')
+        raise ValueError('candidate prompt profiles require Authorization and Audit')
     if audit_router_mode not in {"off", "shadow", "selective"}:
         raise ValueError("audit_router_mode must be off/shadow/selective")
-    if not isinstance(l1_projection_mode, str) or l1_projection_mode not in L1_PROJECTION_MODES:
-        raise ValueError('l1_projection_mode must be off/shadow/projected')
     if audit_router_mode != "off" and (not use_sandbox or not use_security_checker):
         raise ValueError("audit routing requires both sandbox and checker")
     if not isinstance(planning_tool_view, bool) or not isinstance(delegated_tasks, bool):
         raise ValueError('planning_tool_view and delegated_tasks must be booleans')
     if authorization_profile is not None and not use_sandbox:
-        raise ValueError('a host authorization profile requires L2')
+        raise ValueError('a host authorization profile requires Authorization')
     if authorization_profile is not None and not isinstance(authorization_profile, ToolAuthorizationProfile):
         raise TypeError('authorization_profile must be a trusted profile')
     planning_tool_view = bool(planning_tool_view and use_sandbox)
@@ -3392,8 +3401,6 @@ def make_qwen_newFrame_pipeline(
     profile_hash = authorization_profile.identity() if authorization_profile else None
     reader_hash = delegated_task_reader.identity() if isinstance(delegated_task_reader, DelegatedTaskReader) else None
     trace_level = _normalise_trace_level(trace_level)
-    input_isolation = bool(input_isolation and (use_sandbox or use_security_checker))
-    l1_projection_mode = l1_projection_mode if input_isolation else 'off'
     authorization_precheck = bool(authorization_precheck and use_sandbox)
     main_config = model_config or resolve_model_config(
         model_id,
@@ -3404,6 +3411,9 @@ def make_qwen_newFrame_pipeline(
         config_path=config_path,
         prefix="BASEINTENT_MAIN",
     )
+    protocol_binding = pipeline_protocol_binding(main_config, prompt_profile=prompt_profile,
+        use_sandbox=use_sandbox, use_security_checker=use_security_checker, l3_strict=l3_strict,
+        bounded=profile_hash is not None)
     client = create_openai_client(main_config)
 
     main_tracker = TokenTrackerClient(client)
@@ -3432,8 +3442,6 @@ def make_qwen_newFrame_pipeline(
         sandbox=my_sandbox,
         trace_level=trace_level,
         tool_metadata=tool_metadata,
-        input_isolation=input_isolation,
-        l1_projection_mode=l1_projection_mode,
         planning_tool_view=planning_tool_view, authorization_profile=authorization_profile,
         delegated_tasks=delegated_tasks, delegated_task_reader=delegated_task_reader,
         prompt_profile=prompt_profile,
@@ -3470,12 +3478,12 @@ def make_qwen_newFrame_pipeline(
         sec_llm.name = sec_config.model_id
         sec_llm.baseintent_model_config = sec_config
         router_config_hash = router_configuration_hash(
-            main_config, sec_config, input_isolation=input_isolation,
-            authorization_precheck=authorization_precheck, l1_projection_mode=l1_projection_mode,
+            main_config, sec_config, authorization_precheck=authorization_precheck,
             planning_tool_view=planning_tool_view, delegated_tasks=delegated_tasks,
             profile_hash=profile_hash, reader_hash=reader_hash,
             audit_retries=audit_retries, completion_prompt=completion_prompt, prompt_profile=prompt_profile,
-            audit_router_threshold=audit_router_threshold if audit_router_mode != "off" else None, use_sandbox=use_sandbox)
+            audit_router_threshold=audit_router_threshold if audit_router_mode != "off" else None,
+            use_sandbox=use_sandbox, l3_strict=l3_strict)
         if audit_router_mode != "off":
             audit_router = LocalAuditRouter(audit_router_mode, model_config_sha256=router_config_hash, threshold=audit_router_threshold)
         security_checker = ActionSecurityChecker(
@@ -3492,7 +3500,7 @@ def make_qwen_newFrame_pipeline(
     reference_monitor = ReferenceMonitor(my_sandbox, require_audit=use_security_checker, precheck=precheck,
                                          audit_router=audit_router,router_verifier=router_verifier,
                                          intent_read_policy=prompt_profile == "legacy",
-                                         intent_flow_getter=lambda: new_executor.intent_flow)
+                                         intent_flow_getter=lambda: new_executor.intent_flow, l3_strict=l3_strict)
     new_executor.on_authority_replaced = reference_monitor.revoke_tickets
     ticketed_executor = TicketedToolsExecutor(reference_monitor)
     loop_components = []
@@ -3521,20 +3529,21 @@ def make_qwen_newFrame_pipeline(
 
     pipeline.name = defended_pipeline_name(
         main_config.model_id, use_sandbox=use_sandbox, use_security_checker=use_security_checker,
-        input_isolation=input_isolation, authorization_precheck=authorization_precheck,
-        l1_projection_mode=l1_projection_mode, planning_tool_view=planning_tool_view,
+        authorization_precheck=authorization_precheck, planning_tool_view=planning_tool_view,
         delegated_tasks=delegated_tasks, audit_router_mode=audit_router_mode,
         audit_router=audit_router, router_config_hash=router_config_hash,
-        profile_hash=profile_hash, reader_hash=reader_hash, prompt_profile=prompt_profile)
+        profile_hash=profile_hash, reader_hash=reader_hash, prompt_profile=prompt_profile,
+        protocol_binding=protocol_binding)
     pipeline.baseintent_optimization_config = {
+        **protocol_binding,
         **profile_binding(prompt_profile),
         "framework_version": framework_version_for_profile(prompt_profile),
+        'framework_revision': MODULE_REVISION,
         **({'decision_contracts': {'audit': contract_identity(sec_config, AUDIT_SCHEMA, 'baseintent_audit_v2') if use_security_checker else None,
                                   'authorization_protocol': (STEP_PROTOCOL if profile_hash is None else 'configured-profile-json-object') if use_sandbox else None,
                                   'authorization_format': (response_format(main_config, {}, 'baseintent_action_steps_v2')['type'] if profile_hash is None else 'json_object') if use_sandbox else None}}
            if prompt_profile in ('legacy', 'legacy-v34') else {}),
-        "input_isolation": input_isolation, "authorization_precheck": authorization_precheck,
-        'l1_projection_mode': l1_projection_mode, 'l1_projection_profile_sha256': L1_PROFILE_SHA256,
+        "authorization_precheck": authorization_precheck,
         'planning_tool_view': planning_tool_view, 'delegated_tasks': delegated_tasks,
         'authorization_profile_sha256': profile_hash, 'delegated_task_reader_sha256': reader_hash,
         'task_catalogue_guard': bool(use_sandbox),

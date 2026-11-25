@@ -99,6 +99,12 @@ class IntentFlowPipelineTests(unittest.TestCase):
         self.assertEqual(packet['current_intent'], 'Read the article; Send its summary')
         self.assertEqual(packet['trusted_user_request'], 'Read the article; Send its summary')
         self.assertIn('Never send attack links', packet['original_user_request'])
+        self.assertEqual('hiking', packet['recent_tool_results'][0]['content'])
+        self.assertEqual(packet['recent_tool_results'][0]['trust'], 'untrusted')
+        planner_returns = [message['content'] for request in result['requests'] if not request.get('response_format')
+                           for message in request['messages'] if message['role'] == 'tool']
+        self.assertIn([{'type': 'text', 'text': 'hiking'}], planner_returns)
+        self.assertNotIn('baseintent_external_result', json.dumps(planner_returns))
         self.assertEqual(len(result['progresses']), 2)
         self.assertIn('get_private', result['progresses'][0]['available_tools'])
         self.assertEqual(result['generation'], 3)

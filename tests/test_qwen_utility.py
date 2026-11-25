@@ -178,7 +178,7 @@ class PromptProfileTests(unittest.TestCase):
 
     def test_preflight_and_real_factory_share_candidate_name_and_router_binding(self):
         from experiments.run_partial_benchmark import _describe_pipeline
-        options = dict(use_sandbox=True, use_security_checker=True, l1_projection_mode='projected',
+        options = dict(use_sandbox=True, use_security_checker=True,
                        planning_tool_view=True, delegated_tasks=True, audit_router_mode='shadow',
                        audit_router_artifact=None, audit_router_threshold=.65, audit_retries=0, completion_prompt=False,
                        api_key='offline-key')

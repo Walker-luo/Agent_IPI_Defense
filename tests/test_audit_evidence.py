@@ -1,8 +1,10 @@
 """Auditors receive bounded task evidence, not an unauthenticated grant."""
 from copy import deepcopy
 import json
+import os
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import yaml
 
 from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime
@@ -20,6 +22,22 @@ def result(name, args, text, ident='read', error=None):
 
 
 class AuditEvidenceTests(unittest.TestCase):
+    def test_v5_keeps_ten_recent_actions_and_distinguishes_order_from_missing_evidence(self):
+        query = 'Check the status before sending the report'
+        history = [{'action_id': str(i), 'call_id': f'call-{i}', 'state': 'executed'} for i in range(13)]
+        for version, expected in (('v5', 10), ('v4', 13)):
+            with self.subTest(version=version), patch.dict(os.environ, {'BASEINTENT_AUDIT_PRESENTATION': version}):
+                checker = ActionSecurityChecker(SimpleNamespace(name='offline'))
+                call = FunctionCall(function='send_email', args={}, id='candidate')
+                packet = checker._audit_packet(query, FunctionsRuntime(), [call], {'baseintent_action_ledger': history})
+                self.assertEqual(len(packet['action_history']), expected)
+                self.assertEqual(packet['history_truncated'], version == 'v5')
+                if version == 'v5':
+                    self.assertEqual(packet['action_history'][0]['tool_call_id'], 'call-3')
+                    self.assertIn('ORDER_VIOLATION', checker.SYSTEM_POLICY)
+                    self.assertIn('MISSING_EVIDENCE', checker.SYSTEM_POLICY)
+                    self.assertIs(packet['user_visible_delivery_observable'], False)
+
     def packet(self, query, messages, name='send_email', args=None, *, profile='legacy'):
         checker = ActionSecurityChecker(SimpleNamespace(name='offline'), prompt_profile=profile)
         call = FunctionCall(function=name, args=args or {}, id='candidate')

@@ -14,9 +14,9 @@ python -m dashboard.app
 
 后端由实际导入路径、来源、版本和 revision 识别。AgentDojo 提供 workspace/travel/banking/slack，AgentDyn 提供 shopping/github/dailylife。校验仅为安装元数据，不认证运行时源码或远端服务。后端不可用时配置页/历史页仍可打开，显示原因并禁用启动，调用模型前再次校验。
 
-页面使用共享生产 factory，当前框架为 BaseIntent。L2 两次调用、冻结全局工具与固定 ID 进度关联、宿主事件进度、L3 和 Monitor 说明见[框架](framework.md)。页面默认 API 路由 off；CLI 默认 shadow。注册/授权/schema 有效的 public/internal 读取在所有模式固定免审，阈值无法收紧，不按 sink、URL 或对象隐私筛选。off 不关闭 L3。专用路由模式/校准控件不等于已经提供的功能。
+页面使用共享生产 factory，显示 Authorization、Precheck、Audit 和 Intent Progress 的当前配置。网页路由默认 `off`，CLI 默认 `shadow`。各模式共享固定读取免审范围。详见[框架](framework.md)。
 
-选择原生 baseline 时运行对应后端原生循环，防御控件不参与；BaseIntent 消融仍可能经过 Monitor，不能当作原生 baseline。NoL2 关闭自动意图流，NoChecker 保留 L2/进度。审计重试默认 0，完成提示默认关闭；以保存的实际配置为准。L1 投影只有现有银行有限 profile，AgentDyn 没有新增 profile。
+选择原生 baseline 时运行对应后端原生循环。关闭 Authorization 时也关闭 Precheck 和 Intent Progress。关闭 Audit 后，执行仍由 Reference Monitor 介导。审计重试默认 0，完成提示默认关闭。旧 L1 字段只在有记录的历史界面显示。
 
 网页任务上限 0 表示全部，子集由 seed 排序；partial CLI 使用注册前缀，二者需要核对实际 task_selection IDs。预计任务不含额外 GOAL 请求，也不是有效分母或 Token 估算。断开日志不会停止后台任务。
 

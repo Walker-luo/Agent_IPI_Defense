@@ -12,10 +12,9 @@
 
 | Area | Files |
 | --- | --- |
-| Pipeline and execution mediation | `baseintent/pipelines/defended.py` |
-| L1 planning views | `baseintent/input_isolation.py`, `baseintent/l1_projection.py` |
-| L2 and intent progress | `baseintent/l2_authorization.py`, `baseintent/intent_flow.py` |
-| L3 and failure/trace contracts | `baseintent/audit_router.py`, `baseintent/decision_schema.py`, `baseintent/failure_policy.py`, `baseintent/task_diagnostics.py` |
+| Framework identity and execution mediation | `baseintent/framework.py`, `baseintent/pipelines/defended.py` |
+| Authorization and Intent Progress | `baseintent/authorization.py`, `baseintent/intent_flow.py` |
+| Audit and failure/trace contracts | `baseintent/audit_router.py`, `baseintent/decision_schema.py`, `baseintent/failure_policy.py`, `baseintent/task_diagnostics.py` |
 | Models, backend, tools, legacy readers | `baseintent/model_config.py`, `baseintent/request_compatibility.py`, `baseintent/benchmark_catalog.py`, `baseintent/tool_metadata.py`, `baseintent/compat.py` |
 | Measurement and screening | `experiments/run_benchmark.py`, `experiments/run_partial_benchmark.py`, `experiments/run_injection_precheck.py`, `experiments/common/` |
 | Platform and tests | `dashboard/`, `tests/` |
@@ -25,16 +24,16 @@ Current usage starts at `README.md` and `docs/reference/README.md`. `docs/refere
 ## Defense contracts
 
 - Default factory/profile `legacy` is the current **BaseIntent** implementation. A run name is only an output label. Explicit historical profiles retain their original behavior, not compatibility with old measurement caches.
-- L1 rebuilds a planning view from raw history. Source wrappers are guidance, not fact authentication. Only the bounded banking monthly-spending profile projects structure; invalid/unsupported inputs fall back to wrapping. Raw returns remain available for native traces and audit. AgentDyn has no extra projection profile.
-- L2 has two main-client calls: bounded intent/goal-kind decomposition, then global tools and fixed-ID-key progress associations. The host losslessly folds adjacent facts/condition prefixes into the following outcome before assigning IDs. Independent effects and trailing preparations remain distinct.
-- Merge automatic reads and freeze global grants/catalogue within the task. Progress associations cannot grant or forbid tools. Invalid/unauthorized candidates reject the whole batch before audit. No dynamic grants, task-ID rules, argument repair or missing-tool recovery.
+- Planner receives native tool messages with their original roles and contents. The framework revision is `intent-modules-v1`. Historical L1 fields remain available to read-only result consumers.
+- Authorization has two main-client calls for bounded intent/goal-kind decomposition and for global tools and fixed-ID-key progress associations. The host losslessly folds adjacent facts/condition prefixes into the following outcome before assigning IDs. Independent effects and trailing preparations remain distinct.
+- Merge automatic reads and freeze global grants/catalogue within the task. Progress associations cannot grant or forbid tools. Precheck rejects the whole batch before Audit for invalid or unauthorized candidates. No dynamic grants, task-ID rules, argument repair or missing-tool recovery.
 - Explicit bounded delegated task sources keep existing mediated preparation and fail-closed rules. Ordinary tool returns cannot create task authority or recursive delegation. User-confirmed contaminated task files remain outside the supported scope. Trusted bounded profiles retain their own protocols.
 - Host progress owns IDs, revision, state and actual facts/effects/final-answer observations. Semantic output is only satisfaction/evidence_ids. Require exact successful ledger/message matching; blocked/error returns and assistant claims are not execution evidence. Effects belong to the intent bound before execution.
 - Mapped preparation reads may be observed locally. Complex goals, answers, conditions and unknown tools retain semantic checks. Automatic completion is confined to the reviewed bounded direct single-invite request, one effect goal, actual valid audit and native successful None contract. Never generalize this to arbitrary tools or multiple objects.
 - Ambiguous needs the actual final clarification; unknown conditions are not false. condition_false is only for conditional_effect with successful evidence and cannot erase an observed effect. Advance serially, never guess dependency skips. Keep existing bounded continuation/stopping; no re-execution to fill evidence.
-- L3 audits current intent under complete original constraints using native schemas/effects and bounded evidence. Source injection alone does not invalidate aligned facts. Preserve strict finite decision/violations/confidence/reason_code output; no parser repair, retries, default allow or semantic fallback.
-- Registered, authorized, schema-valid public/internal reads bypass L3 in all modes. This is not sink, URL, internal-host or object-privacy filtering; internal tools can read private channels. Personal/secret reads and effects remain audited. A valid deny/abstain is enforced. Final text has no separate action audit gate.
-- Monitor preserves native order, whole-batch one-use receipts and execution tickets bound to intent/catalogue/authorization/context. Mixed batches audit only the nonexempt subset without bypassing whole-batch mediation. NoL2 disables intent flow; NoChecker keeps L2/progress without invented audit evidence.
+- Audit uses the current intent, complete original constraints, native schemas/effects and bounded evidence. Source injection alone does not invalidate aligned facts. Preserve strict finite decision/violations/confidence/reason_code output; no parser repair, retries, default allow or semantic fallback.
+- Registered, authorized, schema-valid public/internal reads bypass Audit in all modes. The predicate checks registration, authorization, schema, effect and sensitivity. Internal tools can read private channels. Personal/secret reads and effects remain audited. The current default enforces deny and abstain. Explicit `l3_strict=0` permits a valid `MISSING_EVIDENCE` abstain only after receipt and execution checks, without granting automatic progress completion. Final text has no separate action audit gate.
+- Monitor preserves native order, whole-batch one-use receipts and execution tickets bound to intent/catalogue/authorization/context. Mixed batches audit only the nonexempt subset without bypassing whole-batch mediation. Disabling Authorization disables Precheck and Intent Progress. NoChecker keeps Authorization and Intent Progress without invented audit evidence.
 - CLI router defaults to shadow; API/factory defaults to off. Thresholds are diagnostic/configuration-bound and do not tune the fixed exemption scope. Preserve native generation sampling and record actual settings. Shared provider adapters/accounting remain in use; never patch installed backends or add fallback requests.
 
 ## Records and compatibility

@@ -177,9 +177,10 @@ class DashboardConfigTests(unittest.TestCase):
         push_log(run_id, "error", "provider rejected main-secret")
         self.assertNotIn("main-secret", run_queues[run_id].get()["message"])
 
-    def test_invalid_layer_switch_does_not_create_a_run(self):
-        response = app.test_client().post("/api/run", json={"suites": ["shopping"], "input_isolation": "false"})
-        self.assertEqual(response.status_code, 400)
+    def test_retired_isolation_switch_does_not_create_a_run(self):
+        for key, value in (("input_isolation", False), ("l1_projection_mode", "off")):
+            response = app.test_client().post("/api/run", json={"suites": ["shopping"], key: value})
+            self.assertEqual(response.status_code, 400)
         self.assertEqual(runs_store, {})
 
     def test_layer_config_is_normalized_before_worker_and_public_storage(self):
@@ -187,7 +188,7 @@ class DashboardConfigTests(unittest.TestCase):
             response = app.test_client().post("/api/run", json={"suites": ["shopping"], "use_sandbox": False})
         config = runs_store[response.get_json()["run_id"]]["config"]
         self.assertFalse(config["authorization_precheck"])
-        self.assertTrue(config["input_isolation"])
+        self.assertNotIn("input_isolation", config)
 
     def test_page_and_config_follow_the_engine_version_instead_of_fixed_labels(self):
         with patch("dashboard.app.FRAMEWORK_VERSION", "future-engine-version", create=True):

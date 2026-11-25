@@ -1,10 +1,10 @@
 """Public failure provenance; blocked tool returns are never execution evidence."""
 
 FAILURE_POLICY = 'framework-failure-native-scoring-v1'
-BLOCK_PREFIXES = ('L2_BLOCKED:', 'L3_BLOCKED:', 'MONITOR_BLOCKED:', 'BASEINTENT_BLOCKED:', 'DSCG_BLOCKED:')
-MODULE_NAMES = {'L1': 'L1 Input Isolation', 'L2': 'L2 Authorization',
-                'L3': 'L3 Security Check', 'Monitor': 'Reference Monitor',
-                'Intent Progress': 'Intent Progress'}
+BLOCK_PREFIXES = ('PRECHECK_BLOCKED:', 'AUDIT_BLOCKED:', 'MONITOR_BLOCKED:',
+                  'L2_BLOCKED:', 'L3_BLOCKED:', 'BASEINTENT_BLOCKED:', 'DSCG_BLOCKED:')
+MODULE_NAMES = {'Authorization': 'Authorization', 'Precheck': 'Precheck', 'Audit': 'Audit',
+                'Monitor': 'Reference Monitor', 'Intent Progress': 'Intent Progress'}
 
 # Only received model-output defects and bounded unsuccessful attempts qualify.
 # Input construction, changed catalogues, I/O and API failures remain errors.
@@ -19,6 +19,12 @@ def is_blocked_error(error):
     return isinstance(error, str) and (error in ('BASEINTENT_BLOCKED','DSCG_BLOCKED') or error.startswith(BLOCK_PREFIXES))
 
 
+def validate_l3_strict(value):
+    if type(value) is not int or value not in (0, 1):
+        raise ValueError('l3_strict must be 0 or 1')
+    return value
+
+
 def block_error(module, reason):
-    prefix = {'L2': 'L2', 'L3': 'L3', 'Monitor': 'MONITOR'}[module]
+    prefix = {'Precheck': 'PRECHECK', 'Audit': 'AUDIT', 'Monitor': 'MONITOR'}[module]
     return f'{prefix}_BLOCKED:{reason}'

@@ -102,13 +102,13 @@ class FullCliTests(unittest.TestCase):
             self.assertIsNone(options['defense'])
             self.assertFalse(options['planning_tool_view'])
             self.assertFalse(options['delegated_tasks'])
-            self.assertEqual(options['l1_projection_mode'], 'off')
+            self.assertNotIn('l1_projection_mode', options)
             self.assertEqual(options['config_path'], 'models.toml')
             self.assertEqual(options['results_dir'], '/tmp/full-output')
             self.assertEqual(full.cli(['--attack', 'all']), 0)
             self.assertEqual(run.call_args.kwargs['attack'], ['all'])
             self.assertEqual(run.call_args.kwargs['results_dir'], BENCHMARK_RESULTS_DIR)
-            self.assertEqual(run.call_args.kwargs['l1_projection_mode'], 'projected')
+            self.assertNotIn('l1_projection_mode', run.call_args.kwargs)
             self.assertTrue(run.call_args.kwargs['planning_tool_view'])
             self.assertTrue(run.call_args.kwargs['delegated_tasks'])
             self.assertEqual(run.call_args.kwargs['audit_router_mode'], 'shadow')
@@ -144,7 +144,7 @@ class FullCliTests(unittest.TestCase):
     def test_legacy_full_python_arguments_are_forwarded(self):
         with patch.object(shared, 'main', return_value=0) as run:
             self.assertEqual(full.main('main', 'audit', ['slack'], False, False, None, False, True,
-                                       run_name='api', l1_projection_mode='shadow'), 0)
+                                       run_name='api'), 0)
         self.assertFalse(run.call_args.kwargs['use_sandbox'])
         self.assertTrue(run.call_args.kwargs['use_security_checker'])
         self.assertEqual(run.call_args.kwargs['task_scope'], 'full')
@@ -184,7 +184,7 @@ class FullExecutionTests(unittest.TestCase):
             self.assertEqual(defended.call_count, 4)
             self.assertEqual(metadata.call_count, 1)
             self.assertTrue(all(call.kwargs['force_rerun'] for call in benchmark.call_args_list))
-            self.assertTrue(all(call.kwargs['l1_projection_mode'] == 'projected' for call in defended.call_args_list))
+            self.assertTrue(all('l1_projection_mode' not in call.kwargs for call in defended.call_args_list))
 
     def test_full_clean_runs_every_user_and_never_loads_attack_or_security_metadata(self):
         def clean_results(pipeline, suite, logdir, **kwargs):

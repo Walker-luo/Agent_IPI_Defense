@@ -5,9 +5,9 @@ from copy import deepcopy
 from pathlib import Path
 
 from baseintent.benchmark_catalog import get_suites
-from baseintent.input_isolation import FRAMEWORK_VERSION, framework_version_for_profile
+from baseintent.framework import FRAMEWORK_VERSION, MODULE_REVISION, framework_version_for_profile
 from baseintent.audit_router import DEFAULT_THRESHOLD, validate_router_options
-from baseintent.l1_projection import MODES as L1_PROJECTION_MODES
+from baseintent.failure_policy import validate_l3_strict
 from baseintent.prompt_profiles import validate_profile, profile_binding
 
 ROUTING_KEYS = ("candidate_batches", "precheck_allowed_batches", "precheck_rejected_batches",
@@ -28,7 +28,7 @@ def normalize_config(payload):
         raise ValueError('audit_router_mode must be off/shadow/selective')
     if router_mode != 'off' and (config.get('origin', False) or not config.get('use_sandbox', True)
                                or not config.get('use_security_checker', True)):
-        raise ValueError('audit routing requires L2 and checker')
+        raise ValueError('audit routing requires Authorization and Audit')
     config['audit_router_mode'] = router_mode
     config['audit_router_threshold'] = threshold
 
@@ -37,8 +37,10 @@ def normalize_config(payload):
     if not isinstance(suites, list) or not suites or any(s not in active_suites for s in suites):
         raise ValueError("请选择有效的评测场景")
     config["suites"] = list(dict.fromkeys(suites))
+    if 'input_isolation' in config or 'l1_projection_mode' in config:
+        raise ValueError('input_isolation 和 l1_projection_mode 已移除')
     for key, default in (("origin", False), ("run_attack", True), ("use_sandbox", True),
-                         ("use_security_checker", True), ("input_isolation", True),
+                         ("use_security_checker", True),
                          ("authorization_precheck", True), ('planning_tool_view', True),
                          ('delegated_tasks', True)):
         value = config.get(key, default)
@@ -54,27 +56,27 @@ def normalize_config(payload):
     if config["trace_level"] not in ("summary", "standard", "full"):
         raise ValueError("请选择有效的日志级别")
     if config["origin"]:
-        for key in ("use_sandbox", "use_security_checker", "input_isolation", "authorization_precheck", 'planning_tool_view', 'delegated_tasks'):
+        for key in ("use_sandbox", "use_security_checker", "authorization_precheck", 'planning_tool_view', 'delegated_tasks'):
             config[key] = False
         for key in ("sec_model_id", "sec_provider", "sec_api_key", "sec_base_url", "tool_metadata_path"):
             config[key] = None
     elif not config["use_security_checker"]:
         for key in ("sec_model_id", "sec_provider", "sec_api_key", "sec_base_url"):
             config[key] = None
-    config["input_isolation"] &= config["use_sandbox"] or config["use_security_checker"]
     config["authorization_precheck"] &= config["use_sandbox"]
     config['planning_tool_view'] &= config['use_sandbox']
     config['delegated_tasks'] &= config['use_sandbox']
-    mode = config.get('l1_projection_mode', 'projected')
-    if not isinstance(mode, str) or mode not in L1_PROJECTION_MODES:
-        raise ValueError('l1_projection_mode 必须为 off/shadow/projected')
-    config['l1_projection_mode'] = mode if config['input_isolation'] else 'off'
-    config["framework_version"] = None if config["origin"] else FRAMEWORK_VERSION
     profile = validate_profile(config.get('prompt_profile', 'legacy'))
     if profile not in ('legacy', 'legacy-v34') and (config['origin'] or not config['use_sandbox'] or not config['use_security_checker']):
-        raise ValueError('candidate prompt profiles require the defended pipeline with L2 and checker')
+        raise ValueError('candidate prompt profiles require Authorization and Audit')
+    strict = validate_l3_strict(config.pop('l3_strict', 1))
+    if strict == 0 and (not config['use_security_checker'] or profile != 'legacy'):
+        raise ValueError('l3_strict=0 requires Audit and the current BaseIntent profile')
+    if config['use_security_checker']:
+        config['l3_strict'] = strict
     config['prompt_profile'] = profile
     config['framework_version'] = None if config['origin'] else framework_version_for_profile(profile)
+    config['framework_revision'] = None if config['origin'] else MODULE_REVISION
     config.pop('prompt_profile_sha256', None)
     config.update(profile_binding(profile))
     return config

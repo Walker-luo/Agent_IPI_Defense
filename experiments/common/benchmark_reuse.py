@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from experiments.common.partial_controls import RunConfigurationError
 from baseintent.benchmark_catalog import benchmark_identity, same_backend
+from baseintent.failure_policy import validate_l3_strict
 
 
 def _read(path):
@@ -113,6 +114,23 @@ class ReusePlan:
         elif recorded_attacks and recorded_attacks[0] != ['none']:
             raise RunConfigurationError('--clean differs from the original run')
         print(f'显式续跑: {self.base}；场景: {", ".join(self.suites)}；攻击: {", ".join(self.attacks)}；沿用原生缓存，不自动重试错误。', flush=True)
+
+    def recorded_audit_strict(self):
+        bindings = [_read(path) for path in sorted(self.existing_runs)]
+        goal_plan = self.base / 'goal_plan.json'
+        if goal_plan.is_file():
+            groups = _read(goal_plan).get('groups', {})
+            if not isinstance(groups, dict) or not all(isinstance(value, dict) for value in groups.values()):
+                raise RunConfigurationError('invalid recorded GOAL group bindings')
+            bindings.extend(groups.values())
+        try:
+            modes = {validate_l3_strict(binding.get('l3_strict', 1)) for binding in bindings
+                     if binding.get('profile') not in ('baseline', 'no-checker')}
+        except ValueError as exc:
+            raise RunConfigurationError('invalid recorded Audit execution policy') from exc
+        if len(modes) > 1:
+            raise RunConfigurationError('inconsistent recorded Audit execution policies')
+        return next(iter(modes), 1)
 
     def check(self, path, expected):
         """Queue new bindings; keep original existing manifests byte-identical."""

@@ -27,7 +27,7 @@ node --test tests/*.cjs
 git diff --check
 ```
 
-既有完整 Python 回归有失败/错误，不能默认全绿。新回归需区分基线失败、后端 skip 与新增故障。确定性 mock 只验证工程契约，不能证明 L2/L3 判断质量、TSR/ASR 或一般安全。文档变更只需链接/状态一致性和 diff 检查。
+既有完整 Python 回归有失败/错误，不能默认全绿。新回归需区分基线失败、后端 skip 与新增故障。确定性 mock 只验证工程契约，不能证明 Authorization 或 Audit 的判断质量、TSR/ASR 或一般安全。文档变更只需链接/状态一致性和 diff 检查。
 
 ## Online Evaluation
 

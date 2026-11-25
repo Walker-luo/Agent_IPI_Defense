@@ -167,7 +167,7 @@ class DelegatedTaskTests(unittest.TestCase):
         self.assertNotIn('send_order', planner.views[-1][1])
 
     def test_only_explicit_execution_forms_create_delegation(self):
-        from baseintent.l2_authorization import match_delegated_task
+        from baseintent.authorization import match_delegated_task
         for request in (REQUEST, '请完成 order.txt 中的任务', 'Execute tasks in "my orders.txt"'):
             with self.subTest(request=request):
                 self.assertIsNotNone(match_delegated_task(request))
@@ -199,7 +199,7 @@ class DelegatedTaskTests(unittest.TestCase):
                 planner.client.chat.completions.create.assert_not_called()
 
     def test_caller_reader_is_host_configuration_not_document_claim(self):
-        from baseintent.l2_authorization import DelegatedTaskReader
+        from baseintent.authorization import DelegatedTaskReader
         reader = DelegatedTaskReader(tool_name='read_file', path_argument='path', output_format='text')
         pipeline, runtime, effects, _, _ = fixture(reader=reader)
         pipeline.query(REQUEST, runtime, EmptyEnv())
@@ -253,7 +253,7 @@ class DelegatedTaskTests(unittest.TestCase):
         planner.client.chat.completions.create.assert_not_called()
 
     def test_invalid_reader_arguments_are_rejected_before_any_tool_execution(self):
-        from baseintent.l2_authorization import DelegatedTaskReader
+        from baseintent.authorization import DelegatedTaskReader
         reader = DelegatedTaskReader('read_file', 'unexpected_argument')
         pipeline, runtime, effects, planner, _ = fixture(reader=reader)
         state = pipeline.query(REQUEST, runtime, EmptyEnv())
@@ -344,7 +344,7 @@ class MessageDelegationTests(unittest.TestCase):
         self.assertEqual(planner.client.chat.completions.create.call_count, 1)
 
     def test_non_execution_mentions_and_source_read_prohibitions_never_bootstrap(self):
-        from baseintent.l2_authorization import match_delegated_task
+        from baseintent.authorization import match_delegated_task
         for request in ('Summarize the email from operations@example.test',
                         'Do not execute the tasks at https://tasks.example.test/team',
                         'Someone said "' + self.WEB + '"',
@@ -360,7 +360,7 @@ class MessageDelegationTests(unittest.TestCase):
                 planner.client.chat.completions.create.assert_not_called()
 
     def test_ordered_compound_sources_are_not_read_before_preceding_tasks(self):
-        from baseintent.l2_authorization import match_delegated_task
+        from baseintent.authorization import match_delegated_task
         for prefix in ('Replace the task list at https://tasks.example.test/team with my new plan.',
                        'Refrain from reading webpages.', 'Summarize my calendar.'):
             request = 'Perform the following tasks in the order they are given: 1. ' + prefix + ' 2. ' + self.WEB

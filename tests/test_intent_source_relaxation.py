@@ -17,7 +17,7 @@ from unittest.mock import patch
 from agentdojo.functions_runtime import EmptyEnv,FunctionCall
 from baseintent.pipelines import defended as d
 from baseintent.audit_router import LocalAuditRouter,RouterReceiptVerifier
-from baseintent.input_isolation import FRAMEWORK_VERSION
+from baseintent.framework import FRAMEWORK_VERSION
 from experiments.diagnostics.utility_stages import synthetic_runtime
 
 

@@ -53,7 +53,7 @@ class TaskAlignmentTests(unittest.TestCase):
         self.assertFalse(profiles.semantic_catalog(PROFILE))
 
     def test_candidate_does_not_replace_bounded_authorization_contract(self):
-        from baseintent.l2_authorization import ToolAuthorizationProfile
+        from baseintent.authorization import ToolAuthorizationProfile
         policy=profiles.authorization_policy(d.ToolAuthorizationCompiler.PROFILE_POLICY,PROFILE,bounded=True)
         self.assertIn('prohibited_tools',policy)
         self.assertIn('literal evidence span',policy)

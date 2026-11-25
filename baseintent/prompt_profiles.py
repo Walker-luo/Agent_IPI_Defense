@@ -3,7 +3,7 @@ import hashlib
 import json
 
 from baseintent.intent_evidence import (PROFILE as V35_PROFILE, AUTH_POLICY as V35_AUTH_POLICY,
-    AUDIT_POLICY as V35_AUDIT_POLICY, MAIN_TASK_POLICY, ISOLATION_POLICY, REVIEW_RULES, DECISION_GUIDE, AUDIT_THINKING, AUDIT_FORMAT, AUDIT_PROTOCOL as V35_OUTPUT_PROTOCOL, ENVELOPE_SCHEMA, permission_schema)
+    AUDIT_POLICY as V35_AUDIT_POLICY, MAIN_TASK_POLICY, REVIEW_RULES, DECISION_GUIDE, AUDIT_THINKING, AUDIT_FORMAT, AUDIT_PROTOCOL as V35_OUTPUT_PROTOCOL, ENVELOPE_SCHEMA, permission_schema)
 
 PROFILES = ('legacy', 'legacy-v34', 'protocol-v1', 'tool-semantics-v1', 'source-context-v1', 'task-alignment-v1', V35_PROFILE)
 CATALOG_SCHEMA = 'baseintent.authorization-tool-semantics.v1'
@@ -107,11 +107,12 @@ def semantic_catalog(profile):
     return validate_profile(profile) in ('tool-semantics-v1', 'source-context-v1')
 
 
-def audit_policy(legacy, profile):
+def audit_policy(legacy, profile, *, presentation=None):
     validate_profile(profile)
     if profile == 'legacy':
-        from baseintent.intent_flow import AUDIT_POLICY
-        return AUDIT_POLICY
+        from baseintent.audit_context import audit_presentation
+        from baseintent.intent_flow import AUDIT_POLICY, AUDIT_POLICY_V5
+        return AUDIT_POLICY_V5 if (presentation or audit_presentation(profile)) == 'v5' else AUDIT_POLICY
     if profile == 'legacy-v34':
         return legacy
     if profile == V35_PROFILE:
@@ -155,7 +156,7 @@ def profile_binding(profile):
         value = {'profile': profile, 'authorization': V35_AUTH_POLICY, 'audit': V35_AUDIT_POLICY,
                  'audit_thinking': {'official_qwen_only': AUDIT_THINKING}, 'audit_output_protocol': V35_OUTPUT_PROTOCOL,
                  'audit_response_format': AUDIT_FORMAT,
-                 'planning_tool_order': 'native-registration-v1', 'main_task_policy': MAIN_TASK_POLICY, 'isolation_policy': ISOLATION_POLICY, 'review_rules': REVIEW_RULES, 'decision_guide': DECISION_GUIDE,
+                 'planning_tool_order': 'native-registration-v1', 'main_task_policy': MAIN_TASK_POLICY, 'review_rules': REVIEW_RULES, 'decision_guide': DECISION_GUIDE,
                  'envelope_schema': ENVELOPE_SCHEMA, 'permission_schema_template': permission_schema(['registered_action']),
                  'catalog_schema': 'native-tools-separated-v1', 'audit_input': 'baseintent.audit-input.v5.10'}
     digest = hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()

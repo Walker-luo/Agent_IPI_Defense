@@ -5,7 +5,7 @@ from tests import test_partial_agentdyn as tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from baseintent.l2_authorization import ToolAuthorizationProfile
+from baseintent.authorization import ToolAuthorizationProfile
 from baseintent.model_config import ModelConfig
 from baseintent.benchmark_catalog import get_backend
 from baseintent.pipelines import defended as d

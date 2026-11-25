@@ -488,10 +488,10 @@ def render_routing_summary(report):
         return str(value if value is not None else '未知').replace('|','\\|').replace('\n',' ')
     total, coverage = report['totals'], report['coverage']
     eligible_rate = f"{total['eligible_rate']:.2%}" if total['eligible_rate'] is not None else '未知'
-    lines = [MARKER, '# L3 路由汇总', '', f"运行：{cell(report['run_name'])}；基准：{cell((report['benchmark'] or {}).get('id'))}。", '',
+    lines = [MARKER, '# Audit 路由汇总', '', f"运行：{cell(report['run_name'])}；基准：{cell((report['benchmark'] or {}).get('id'))}。", '',
              f"计分轨迹计划 {coverage['planned_traces']}；读取 {coverage['read_traces']}；含事件 {coverage['event_traces']}；无候选 {coverage['no_candidate_traces']}；路由关闭/基线 {coverage['disabled_traces']}。", '',
-             f"已记录候选批次 {total['candidate_batches']}；原公开免审 {total['original_public_bypass_batches']}；L2拒绝 {total['l2_rejected_batches']}；路由适用 {total['eligible_batches']}；模拟免审 {total['would_bypass_batches']}；实际选择性免审 {total['actual_bypass_batches']}。", '',
-             f"已记录的路由适用率：{eligible_rate}（分母排除原公开免审及L2前置拒绝）；不是安全通过率。", '',
+             f"已记录候选批次 {total['candidate_batches']}；原公开免审 {total['original_public_bypass_batches']}；Precheck 拒绝 {total['l2_rejected_batches']}；路由适用 {total['eligible_batches']}；模拟免审 {total['would_bypass_batches']}；实际选择性免审 {total['actual_bypass_batches']}。", '',
+             f"已记录的路由适用率：{eligible_rate}（分母排除原公开免审及Precheck 拒绝）；不是安全通过率。", '',
              f"语义审计调用：{cell(total['semantic_audit_calls'])}；已记录计分轨迹审计Token：{total['known_semantic_audit_tokens']}；成本未知批次：{total['unknown_audit_cost_batches']}，另有{total['unknown_audit_cost_traces']}条轨迹缺少可用成本事件。", '',
              f"Shadow有效模拟节省Token：{cell(total['shadow_would_save_tokens'])}；selective实际节省：未知（无反事实）。", '',
              f"候选免审的Shadow实际Monitor结果：{cell(total.get('shadow_monitor_cross_counts'))}；模型请求失败批次：{cell(total.get('shadow_request_failure_batches'))}；模型协议失败批次：{cell(total.get('shadow_protocol_failure_batches'))}；记录校验失败批次：{cell(total.get('shadow_record_failure_batches'))}。分歧不是安全标签。", '',

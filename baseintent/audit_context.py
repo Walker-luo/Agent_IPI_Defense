@@ -4,11 +4,13 @@ import re
 import unicodedata
 
 import yaml
+from baseintent.compat import getenv
 
 INPUT_SCHEMA = 'baseintent.audit-input.v2'
 EVIDENCE_VERSION = 'task-evidence-v1'
 ADAPTIVE_EVIDENCE_VERSION = 'task-evidence-adaptive-v2'
 MAX_RESULTS = 8
+AUDIT_V5_HISTORY = 10
 RECENT_RESULTS = 4
 FACT_BUDGET = 8192
 EXPANDED_FACT_BUDGET = 32768
@@ -16,6 +18,15 @@ MAX_CALL_ARGUMENTS = 1024
 MAX_SOURCE_RETURNS = 256
 MAX_STRUCTURED_BYTES = 131072
 FILE_FIELDS = frozenset({'id_', 'filename', 'size', 'owner', 'shared_with', 'last_modified', 'content'})
+
+
+def audit_presentation(profile):
+    if profile != 'legacy':
+        return 'v4'
+    version = getenv('BASEINTENT_AUDIT_PRESENTATION', 'v5')
+    if version not in ('v4', 'v5'):
+        raise ValueError('BASEINTENT_AUDIT_PRESENTATION must be v4 or v5')
+    return version
 
 
 class _InvalidEvidence(ValueError):

@@ -8,7 +8,7 @@ import unittest
 
 class ProjectIdentityTests(unittest.TestCase):
     def test_current_package_and_framework_name(self):
-        from baseintent.input_isolation import FRAMEWORK_VERSION
+        from baseintent.framework import FRAMEWORK_VERSION
         self.assertEqual(FRAMEWORK_VERSION,'BaseIntent')
 
     def test_legacy_metadata_read_does_not_rewrite_facts_or_identity_values(self):

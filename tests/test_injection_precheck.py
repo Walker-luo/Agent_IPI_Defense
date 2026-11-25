@@ -329,7 +329,7 @@ class InjectionPrecheckTests(unittest.TestCase):
             self.assertEqual(full.cli(['--fliter', str(self.output / 'fliter.json'), '--goal', '--name', 'unified', '--suites', 'workspace',
                 '--results-dir', str(self.root / 'benchmarks'), '--audit-router-mode', 'shadow',
                 '--trace-level', 'full', '--no-tool-view', '--no-delegated-tasks',
-                '--l1-projection-mode', 'off', '--audit-retries', '1', '--completion-prompt']), 0)
+                '--audit-retries', '1', '--completion-prompt']), 0)
             options = runner.call_args.kwargs
             self.assertEqual(options['task_scope'], 'full')
             self.assertTrue(options['goal'])
@@ -337,7 +337,7 @@ class InjectionPrecheckTests(unittest.TestCase):
             self.assertEqual(options['trace_level'], 'full')
             self.assertFalse(options['planning_tool_view'])
             self.assertFalse(options['delegated_tasks'])
-            self.assertEqual(options['l1_projection_mode'], 'off')
+            self.assertNotIn('l1_projection_mode', options)
             self.assertEqual(options['audit_retries'], 1)
             self.assertTrue(options['completion_prompt'])
 

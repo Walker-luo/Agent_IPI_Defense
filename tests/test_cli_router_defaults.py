@@ -31,6 +31,13 @@ class CliRouterDefaultTests(unittest.TestCase):
                     self.assertEqual(run.call_args.kwargs['audit_router_mode'], mode)
                     self.assertEqual(run.call_args.kwargs['audit_router_threshold'], .75)
 
+    def test_both_cli_entries_forward_strict_without_inventing_resume_override(self):
+        for entry in (partial.cli, full.cli):
+            for flags, value in (([], None), (['--strict', '0'], 0), (['--strict', '1'], 1)):
+                with self.subTest(entry=entry, flags=flags), patch.object(partial, 'main', return_value=0) as run:
+                    self.assertEqual(entry(flags), 0)
+                    self.assertEqual(run.call_args.kwargs['l3_strict'], value)
+
     def test_explicit_incompatible_modes_remain_errors(self):
         for entry in (partial.cli, full.cli):
             for flags in (['--baseline'], ['--no-checker']):

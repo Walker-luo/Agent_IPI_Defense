@@ -24,9 +24,9 @@
         <section class="config-section" aria-labelledby="config-basic">
           <h2 id="config-basic">评测对象与模型</h2>
           <div class="field-group"><label class="form-label" for="run-label">运行名称</label><input type="text" id="run-label" class="form-control form-control-sm" placeholder="例如：{{ framework_version }} · 新对照" maxlength="120"><small class="field-help">框架或配置改变时使用新名称，保留原实验身份。</small></div>
-          <div class="field-group"><label class="form-label" for="pipeline-type">评测对象</label><select id="pipeline-type" class="form-select form-select-sm"><option value="baseintent">BaseIntent · 三层防御</option><option value="origin">原生 Baseline / 防御</option></select></div>
+          <div class="field-group"><label class="form-label" for="pipeline-type">评测对象</label><select id="pipeline-type" class="form-select form-select-sm"><option value="baseintent">BaseIntent</option><option value="origin">原生 Baseline / 防御</option></select></div>
           <div class="field-group"><label class="form-label" for="model-id">主模型</label><select id="model-id" class="form-select form-select-sm"><option value="" selected>Local/Env 配置</option></select></div>
-          <div class="field-group" id="sec-model-group"><label class="form-label" for="sec-model-id">L3 审计模型</label><select id="sec-model-id" class="form-select form-select-sm"><option value="" selected>Local/Env 配置</option></select><small class="field-help">L2 授权使用主模型；L3 可使用独立审计模型。</small></div>
+          <div class="field-group" id="sec-model-group"><label class="form-label" for="sec-model-id">Audit 模型</label><select id="sec-model-id" class="form-select form-select-sm"><option value="" selected>Local/Env 配置</option></select><small class="field-help">Authorization 使用主模型。Audit 可使用独立模型。</small></div>
         </section>
 
         <section class="config-section" aria-labelledby="config-scope">
@@ -45,14 +45,13 @@
         <section class="config-section" aria-labelledby="config-defense">
           <h2 id="config-defense">防御组合 <span class="framework-version">{{ framework_version }}</span></h2>
           <div id="ablation-group" class="toggle-list">
-            <div class="field-group"><label class="form-label" for="defense-preset">配置预设</label><select id="defense-preset" class="form-select form-select-sm"><option value="full">完整三层</option><option value="no-l1">移除 L1 · 工具返回隔离</option><option value="no-l2">移除 L2 · 工具授权</option><option value="no-l3">移除 L3 · 动作审计</option><option value="v2">入口消融 · 关闭隔离与准备入口</option><option value="custom">自定义组合</option></select></div>
-            <label class="toggle-row layer-one" for="use-input-isolation"><span><i class="bi bi-braces"></i><strong>L1 · 工具返回隔离</strong><small>重建规划视图；有限银行任务可投影字段</small></span><input class="form-check-input" type="checkbox" id="use-input-isolation" checked></label>
-            <label class="toggle-row layer-two" for="use-sandbox"><span><i class="bi bi-key"></i><strong>L2 · 可信任务工具授权</strong><small>两次调用编译目标与全局工具，默认整批前置检查</small></span><input class="form-check-input" type="checkbox" id="use-sandbox" checked></label>
-            <label class="precheck-option" for="authorization-precheck"><input class="form-check-input" type="checkbox" id="authorization-precheck" checked><span>候选批次在 L3 前校验权限</span></label>
+            <div class="field-group"><label class="form-label" for="defense-preset">配置预设</label><select id="defense-preset" class="form-select form-select-sm"><option value="full">完整框架</option><option value="no-authorization">关闭 Authorization</option><option value="no-audit">关闭 Audit</option><option value="v2">入口消融 · 关闭前置检查和任务展开</option><option value="custom">自定义组合</option></select></div>
+            <label class="toggle-row layer-two" for="use-sandbox"><span><i class="bi bi-key"></i><strong>Authorization</strong><small>两次调用编译目标与全局工具，默认整批前置检查</small></span><input class="form-check-input" type="checkbox" id="use-sandbox" checked></label>
+            <label class="precheck-option" for="authorization-precheck"><input class="form-check-input" type="checkbox" id="authorization-precheck" checked><span>Precheck · 整批校验权限与参数</span></label>
             <label class="precheck-option" for="planning-tool-view"><input class="form-check-input" type="checkbox" id="planning-tool-view" checked><span>规划器仅展示已授权工具</span></label>
             <label class="precheck-option" for="delegated-tasks"><input class="form-check-input" type="checkbox" id="delegated-tasks" checked><span>展开明确授权的任务来源</span></label>
             <small class="field-help delegation-help">明确执行文件时先经监控读取，再编译完整任务；总结文件不会展开。</small>
-            <label class="toggle-row layer-three" for="use-security-checker"><span><i class="bi bi-shield-check"></i><strong>L3 · 当前动作语义审计</strong><small>按当前目标与完整约束审计非免审调用</small></span><input class="form-check-input" type="checkbox" id="use-security-checker" checked></label>
+            <label class="toggle-row layer-three" for="use-security-checker"><span><i class="bi bi-shield-check"></i><strong>Audit</strong><small>按当前目标与完整约束审计非免审调用</small></span><input class="form-check-input" type="checkbox" id="use-security-checker" checked></label>
             <p class="config-note" id="layer-config-note">Monitor 与一次性票据控制原生整批执行；宿主事件与模型语义进度分别记录。</p>
           </div>
           <div class="field-group" id="defense-group" style="display:none;"><label class="form-label" for="defense">AgentDojo 防御</label><select id="defense" class="form-select form-select-sm"><option value="" selected>无防御</option><option value="tool_filter">工具过滤器</option><option value="transformers_pi_detector">注入检测器</option><option value="spotlighting_with_delimiting">定界高亮</option><option value="repeat_user_prompt">重复用户提示</option></select></div>
@@ -61,7 +60,7 @@
         <details class="config-section connection-section" id="advanced-config">
           <summary>高级设置 <span>日志、子集与连接</span></summary>
           <div class="advanced-fields">
-          <div class="field-group" id="trace-level-group"><label class="form-label" for="trace-level">诊断级别</label><select id="trace-level" class="form-select form-select-sm"><option value="summary">Summary · 必要诊断（默认）</option><option value="standard">Standard · 判决与动作记录</option><option value="full">Full · 详细诊断</option></select><small class="field-help">任务JSON始终精简；L3和进度原始回复保存在同名诊断文件，Full增加写入开销。</small></div>
+          <div class="field-group" id="trace-level-group"><label class="form-label" for="trace-level">诊断级别</label><select id="trace-level" class="form-select form-select-sm"><option value="summary">Summary · 必要诊断（默认）</option><option value="standard">Standard · 判决与动作记录</option><option value="full">Full · 详细诊断</option></select><small class="field-help">任务JSON始终精简；Audit 和 Intent Progress原始回复保存在同名诊断文件，Full增加写入开销。</small></div>
           <div class="field-group"><label class="form-label" for="selection-seed">子集选择 seed</label><input id="selection-seed" type="number" min="0" step="1" value="20260927" class="form-control form-control-sm"><small class="field-help">网页按 seed 排序；partial CLI 使用注册顺序前缀。跨入口对比需核对任务 ID。</small></div>
           <div class="field-group metadata-path-group"><label class="form-label" for="tool-metadata-path">工具风险元数据 <span class="field-optional">可选</span></label><input type="text" id="tool-metadata-path" class="form-control form-control-sm" placeholder="留空使用本地 / 内置目录" spellcheck="false"><small class="field-help">未知或不兼容的工具目录在调用前拒绝。</small></div>
           <p class="section-help"><i class="bi bi-lock"></i>仅用于本次运行；留空则使用环境变量或 TOML 配置。</p>
@@ -123,13 +122,14 @@
       <section class="framework-strip" aria-label="待启动防御配置">
         <div class="framework-strip-heading"><span>待启动配置</span><strong id="workspace-framework">{{ framework_version }}</strong><span id="workspace-mode">对抗评测</span></div>
         <div class="framework-layer-grid">
-          <div id="preview-layer-l1" class="framework-layer layer-one"><span>L1</span><div><strong>工具返回隔离</strong><small>重建来源视图；有限银行交易字段投影</small></div><b>启用</b></div>
-          <div id="preview-layer-l2" class="framework-layer layer-two"><span>L2</span><div><strong>可信任务工具授权</strong><small>分解目标并冻结全局工具授权</small></div><b>启用</b></div>
-          <div id="preview-layer-l3" class="framework-layer layer-three"><span>L3</span><div><strong>当前动作语义审计</strong><small>审计非免审调用及外发目的地</small></div><b>启用</b></div>
+          <div id="preview-layer-authorization" class="framework-layer layer-two"><span><i class="bi bi-key"></i></span><div><strong>Authorization</strong><small>分解目标并冻结全局工具授权</small></div><b>启用</b></div>
+          <div id="preview-layer-precheck" class="framework-layer layer-one"><span><i class="bi bi-list-check"></i></span><div><strong>Precheck</strong><small>整批校验工具、权限与参数</small></div><b>启用</b></div>
+          <div id="preview-layer-audit" class="framework-layer layer-three"><span><i class="bi bi-shield-check"></i></span><div><strong>Audit</strong><small>核对非免审动作与当前目标</small></div><b>启用</b></div>
+          <div id="preview-layer-progress" class="framework-layer layer-two"><span><i class="bi bi-arrow-repeat"></i></span><div><strong>Intent Progress</strong><small>核验执行证据并推进当前意图</small></div><b>启用</b></div>
         </div>
-        <p id="framework-flow">任务授权 → 已授权工具视图 → 主模型候选 → L2 整批前置 → L3 → Monitor / 票据执行</p>
-        <p id="delegation-flow" class="delegation-flow"><strong>明确委托任务来源</strong><span>指定文件、唯一邮件或网页 → 监控读取 → 原要求 + 完整任务 → 两次主模型调用编译步骤与工具 → 规划与 L3 共享有效任务</span></p>
-        <p id="workspace-audit-note" class="workspace-audit-note">网页/API 路由默认 off，CLI 默认 shadow；所有模式均免审已注册、授权且 schema 合法的 public/internal 读取，其余调用保留 L3。</p>
+        <p id="framework-flow">Authorization → 主模型规划 → Precheck → Audit → Monitor / 票据执行</p>
+        <p id="delegation-flow" class="delegation-flow"><strong>明确委托任务来源</strong><span>指定文件、唯一邮件或网页 → 监控读取 → 原要求 + 完整任务 → 两次主模型调用编译步骤与工具 → 规划与 Audit 共享有效任务</span></p>
+        <p id="workspace-audit-note" class="workspace-audit-note">网页/API 路由默认 off，CLI 默认 shadow；所有模式均免审已注册、授权且 schema 合法的 public/internal 读取，其余调用进入 Audit。</p>
       </section>
       <div class="workspace-controls"><label for="workspace-run">已保存运行</label><select id="workspace-run" class="form-select form-select-sm"><option value="">暂无运行</option></select><button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadAllRuns()" aria-label="刷新运行列表"><i class="bi bi-arrow-repeat"></i></button><a href="/history">历史分析与导出</a></div>
       <div id="run-progress" class="run-progress" hidden aria-live="polite"><div><strong id="progress-phase">准备运行</strong><span id="progress-count">0 / 0 个场景完成</span></div><progress id="suite-progress" value="0" max="1" aria-label="已完成场景"></progress><small>进度按已完成场景统计，任务执行详情见日志。</small></div>
@@ -154,7 +154,7 @@
           <div class="log-viewer" id="log-viewer"><div class="empty-state log-placeholder"><i class="bi bi-terminal"></i><strong>暂无运行日志</strong><span>状态与安全判决将在运行后显示</span></div></div>
         </section>
 
-        <section class="tab-pane fade show active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview"><div class="panel-body" id="overview-content"><div class="evaluation-empty"><div class="empty-illustration" aria-hidden="true"><i class="bi bi-braces"></i><i class="bi bi-key"></i><i class="bi bi-shield-check"></i></div><h3>准备一次可对比的评测</h3><p>在左侧配置模型与场景，开始评测后查看 TSR、ASR、Token 消耗与三层路由记录。</p><div class="empty-metric-guide"><span><b>TSR</b>任务完成情况</span><span><b>ASR</b>原生攻击判定</span><span><b>Tokens</b>主模型 + 审计模型</span></div><a href="/history">查看已有实验的历史分析</a></div></div></section>
+        <section class="tab-pane fade show active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview"><div class="panel-body" id="overview-content"><div class="evaluation-empty"><div class="empty-illustration" aria-hidden="true"><i class="bi bi-braces"></i><i class="bi bi-key"></i><i class="bi bi-shield-check"></i></div><h3>准备一次可对比的评测</h3><p>在左侧配置模型与场景，开始评测后查看 TSR、ASR、Token 消耗与模块运行记录。</p><div class="empty-metric-guide"><span><b>TSR</b>任务完成情况</span><span><b>ASR</b>原生攻击判定</span><span><b>Tokens</b>主模型 + 审计模型</span></div><a href="/history">查看已有实验的历史分析</a></div></div></section>
 
         <section class="tab-pane fade" id="panel-charts" role="tabpanel">
           <div class="panel-body"><div class="data-toolbar"><label for="chart-data-source">运行数据</label><select id="chart-data-source" class="form-select form-select-sm"><option value="">选择运行</option></select><button class="btn btn-sm btn-outline-secondary" onclick="refreshCharts()"><i class="bi bi-arrow-repeat"></i>载入</button></div><div class="row g-3" id="charts-container"><div class="col-12 empty-state"><i class="bi bi-bar-chart-line"></i><strong>暂无图表数据</strong><span>选择一条已完成的运行记录</span></div></div><div class="row g-3 mt-0" id="charts-row-2"></div></div>
@@ -179,32 +179,21 @@
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
       <div class="modal-header"><div><span class="section-kicker">当前已实施 · {{ framework_version }}</span><h5 class="modal-title" id="architecture-title">框架介绍：BaseIntent</h5></div><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button></div>
       <div class="modal-body">
-        <p class="arch-status">BaseIntent 将工具授权、目标进度和动作审计分开：L2 确定任务可用的工具，宿主和语义判断跟踪当前目标，L3 审计需要审查的具体调用。L1 为每次规划重建工具返回视图，Monitor 则介导整批执行。下方按职责介绍各部分；实际运行从可信有效任务和 L2 授权开始。</p>
+        <p class="arch-status">可信任务先经 Authorization。规划器产生候选后，Precheck 校验整批，Audit 核对非免审动作。Monitor 介导执行，原生结果反馈给规划器和 Intent Progress。</p>
         <div class="architecture-diagram">
-          <div class="arch-lane" data-defense-layer="input-isolation">
-            <span class="arch-lane-label">第一层 · 工具返回隔离</span>
-            <div class="arch-flow">
-              <div class="arch-box arch-input"><i class="bi bi-file-text"></i><strong>外部结果与错误正文</strong><small>原消息保留给日志与审计</small></div>
-              <i class="bi bi-arrow-right arch-arrow" aria-hidden="true"></i>
-              <div class="arch-box arch-compiler"><i class="bi bi-braces"></i><strong>有限字段投影 / 来源封装</strong><small>月支出省略交易备注；不适用则保留原文</small></div>
-              <i class="bi bi-arrow-right arch-arrow" aria-hidden="true"></i>
-              <div class="arch-box arch-model"><i class="bi bi-cpu"></i><strong>主模型规划视图</strong><small>来源标记是提示，不认证事实</small></div>
-            </div>
-          </div>
-          <div class="arch-connector"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>L1 投影仅支持原生银行月支出任务，不认证事实；必要分析与引用保留原文。L2 授权只来自可信任务与宿主策略</span></div>
           <div class="arch-lane" data-defense-layer="authorization">
-            <span class="arch-lane-label">第二层 · 可信任务工具授权</span>
+            <span class="arch-lane-label">Authorization · 可信任务工具授权</span>
             <div class="arch-flow">
               <div class="arch-box arch-input"><i class="bi bi-person-check"></i><strong>有效用户任务</strong><small>明确委托的文件先准备读取</small></div>
               <i class="bi bi-arrow-right arch-arrow" aria-hidden="true"></i>
-              <div class="arch-box arch-compiler"><i class="bi bi-list-check"></i><strong>两次调用：目标，再选工具</strong><small>宿主归并准备前缀并分配固定 ID</small></div>
+              <div class="arch-box arch-compiler"><i class="bi bi-list-check"></i><strong>两次调用生成目标与工具</strong><small>宿主归并准备前缀并分配固定 ID</small></div>
               <i class="bi bi-arrow-right arch-arrow" aria-hidden="true"></i>
-              <div class="arch-box arch-sandbox"><i class="bi bi-funnel"></i><strong>候选权限前置检查</strong><small>非法混合批次整体拒绝</small></div>
+              <div class="arch-box arch-sandbox"><i class="bi bi-funnel"></i><strong>冻结全局权限</strong><small>附带固定 ID 的进度关联</small></div>
             </div>
           </div>
-          <div class="arch-connector"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>规划和 L3 使用同一完整有效任务；工具授权是全局集合，不是按意图动态授予。非法或未授权候选使整批在 L3 前被拒绝</span></div>
+          <div class="arch-connector"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Precheck 校验每项工具的注册状态、权限、原生 schema 和风险元数据，发现无效候选即拒绝整批</span></div>
           <div class="arch-lane" data-defense-layer="audit">
-            <span class="arch-lane-label">第三层 · 当前动作语义审计</span>
+            <span class="arch-lane-label">Audit · 当前动作语义审计</span>
             <div class="arch-flow">
               <div class="arch-box arch-model"><i class="bi bi-cpu"></i><strong>当前候选动作</strong><small>工具、参数与有限动作历史</small></div>
               <i class="bi bi-arrow-right arch-arrow" aria-hidden="true"></i>
@@ -213,7 +202,7 @@
               <div class="arch-box arch-checker"><i class="bi bi-clipboard-check"></i><strong>严格四字段审计结论</strong><small>decision / violations / confidence / reason_code</small></div>
             </div>
           </div>
-          <div class="arch-connector"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>L3 依据当前目标、完整原始约束、原生 schema、效果与有界证据审计；注入文字本身不等于违规</span></div>
+          <div class="arch-connector"><i class="bi bi-arrow-down" aria-hidden="true"></i><span>Audit 依据当前目标、完整原始约束、原生 schema、效果与有界证据审计；注入文字本身不等于违规</span></div>
           <div class="arch-lane" data-execution-infrastructure="monitor-ticket">
             <span class="arch-lane-label">执行基础设施 · Monitor / 一次性票据</span>
             <div class="arch-flow">
@@ -224,16 +213,16 @@
               <div class="arch-box arch-tool"><i class="bi bi-gear"></i><strong>真实工具执行</strong><small>结果返回主模型</small></div>
             </div>
           </div>
-          <div class="arch-recovery"><i class="bi bi-arrow-return-left"></i><span>工具反馈经 L1 返回主模型；新候选重新经过 L2、L3 和票据校验。宿主记录实际事实、效果和最终回复；需要语义判断时，模型只返回满足状态和证据引用，宿主核验成功账本或实际消息后逐项推进。</span></div>
+          <div class="arch-recovery"><i class="bi bi-arrow-return-left"></i><span>原生工具结果直接返回规划器。Intent Progress 核验实际执行和回复，并将当前或下一意图反馈给规划器。</span></div>
           <div class="arch-details">
-            <div><span>L1 · 规划视图</span><h6>保留原始证据</h6><p>每次从原始历史重建视图，普通返回和错误带来源标记。仅有界银行月支出任务可投影交易字段；不支持或无收益时回退封装。原始返回仍供审计和原生轨迹使用，来源标记不保证内容真实。</p></div>
-            <div><span>L2 · 授权与关联</span><h6>全局权限在任务内冻结</h6><p>第一次调用分解目标及类型，宿主无损归并准备前缀并分配 ID；第二次选择全局工具并关联准备与完成足迹（prepare_tools / completion_groups）。进度关联不能授予或禁止工具。默认前置检查对注册、权限和原生 schema 整批校验。</p></div>
-            <div><span>进度 · 执行证据</span><h6>逐项推进目标</h6><p>宿主管理状态并核对实际成功调用或消息；错误、阻挡和助手声称完成都不是执行证据。复杂目标仍需语义判断；未知条件不等于 false。自动完成仅限已审核的有界单次直接邀请场景。</p></div>
-            <div><span>L3 · 动作审计</span><h6>按目标和约束判断</h6><p>审计使用当前目标、完整任务约束、原生工具定义及有界证据；外发同时检查正文和目的地。判决严格为 allow、deny 或 abstain 及对应字段；无解析修补或默认放行。</p></div>
-            <div><span>L3 · 固定读取免审</span><h6>所有路由模式生效</h6><p>已注册、已授权且 schema 合法的 public/internal 读取免审；personal/secret 读取与效果调用仍审计。免审不筛选 URL、sink 或对象隐私；internal 工具可能读取私有频道。</p></div>
+            <div><span>Precheck</span><h6>非法候选使整批拒绝</h6><p>执行前校验注册、任务授权、原生 schema 和元数据。授权保存在宿主侧，候选参数不能扩大权限。</p></div>
+            <div><span>Authorization</span><h6>全局权限在任务内冻结</h6><p>第一次调用分解目标及类型，宿主无损归并准备前缀并分配 ID；第二次选择全局工具并关联准备与完成足迹（prepare_tools / completion_groups）。进度关联不能授予或禁止工具。</p></div>
+            <div><span>Intent Progress</span><h6>逐项推进目标</h6><p>宿主管理状态并核对实际成功调用或消息；错误、阻挡和助手声称完成都不是执行证据。复杂目标仍需语义判断；未知条件不等于 false。自动完成仅限已审核的有界单次直接邀请场景。</p></div>
+            <div><span>Audit</span><h6>按目标和约束判断</h6><p>审计使用当前目标、完整任务约束、原生工具定义及有界证据；外发同时检查正文和目的地。判决严格为 allow、deny 或 abstain 及对应字段；无解析修补或默认放行。</p></div>
+            <div><span>Audit · 固定读取免审</span><h6>所有路由模式生效</h6><p>已注册、已授权且 schema 合法的 public/internal 读取免审；personal/secret 读取与效果调用仍审计。免审不筛选 URL、sink 或对象隐私；internal 工具可能读取私有频道。</p></div>
             <div><span>Monitor · 执行</span><h6>整批回执与一次性票据</h6><p>混合批次只审计非免审部分，仍按原顺序介导整批。执行前复核权限、目录及意图状态，票据绑定调用与上下文并防止重放。</p></div>
             <div><span>任务来源</span><h6>仅展开明确委托</h6><p>受支持的明确委托来源先经监控读取，再与原用户约束组成有效任务；普通返回不能扩权或递归委托。读取失败、歧义和超限时失败关闭，用户确认后受污染的任务文件不在支持范围。</p></div>
-            <div><span>配置与边界</span><h6>路由 off 仍保留 L3</h6><p>网页/API 默认 off，CLI 默认 shadow；三种路由共享固定免审范围。工具级授权不保证对象或参数权限，最终纯文本没有独立动作审计；语义满足判断也不等于事实认证。</p></div>
+            <div><span>配置与边界</span><h6>路由 off 仍启用 Audit</h6><p>网页/API 默认 off，CLI 默认 shadow；三种路由共享固定免审范围。工具级授权不保证对象或参数权限，最终纯文本没有独立动作审计；语义满足判断也不等于事实认证。</p></div>
           </div>
         </div>
       </div>

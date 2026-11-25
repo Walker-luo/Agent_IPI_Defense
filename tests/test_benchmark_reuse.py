@@ -10,10 +10,11 @@ from pathlib import Path
 from test_partial_agentdyn import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from agentdojo.task_suite import get_suite
 from experiments import run_benchmark as full, run_partial_benchmark as runner
+from experiments.run_partial_benchmark import _describe_pipeline as real_pipeline_descriptor
 from test_partial_attacks import fake_pipeline
 
 
@@ -149,6 +150,33 @@ class ReuseIntegrationTests(unittest.TestCase):
         path.unlink(); calls = len(self.executed)
         self.assertEqual(self.run_benchmark(reuse=True, run_attack=False, attack=None), 0)
         self.assertEqual(len(self.executed), calls + 1)
+
+    def test_manifest_binds_openai_task_view_and_restores_strict_on_resume(self):
+        from baseintent.model_config import ModelConfig
+        from baseintent.pipelines import defended
+        config = ModelConfig('offline-model', 'fixture', 'https://compatible.invalid/v1', 'openai')
+        options = dict(origin=False, run_attack=False, attack=None)
+        with patch.object(runner, 'resolve_model_config', return_value=config), \
+                patch.object(runner, '_describe_pipeline', side_effect=real_pipeline_descriptor), \
+                patch.object(defended, 'resolve_model_config', return_value=config), \
+                patch.object(defended, 'create_openai_client', return_value=Mock()), \
+                patch.dict(os.environ, {'BASEINTENT_OPENAI_TASK_VIEW_FORMAT': 'json_schema',
+                                        'BASEINTENT_AUDIT_PRESENTATION': 'v5'}):
+            self.assertEqual(self.run_benchmark(**options, l3_strict=0), 0)
+            path = self.base / 'none/workspace/run_manifest.json'
+            original = path.read_bytes()
+            binding = json.loads(original)
+            self.assertEqual(binding['task_view_response_format'], 'json_schema')
+            self.assertEqual(len(binding['task_view_request_sha256']), 64)
+            self.assertEqual(binding['audit_presentation'], 'v5')
+            self.assertEqual(binding['l3_strict'], 0)
+            calls = len(self.executed)
+            self.assertEqual(self.run_benchmark(**options, reuse=True), 0)
+            self.assertEqual(self.run_benchmark(**options, reuse=True, l3_strict=1), 1)
+            with patch.dict(os.environ, {'BASEINTENT_OPENAI_TASK_VIEW_FORMAT': 'json_object'}):
+                self.assertEqual(self.run_benchmark(**options, reuse=True), 1)
+            self.assertEqual(len(self.executed), calls)
+            self.assertEqual(path.read_bytes(), original)
 
     def test_native_accepted_error_cache_is_not_automatically_retried(self):
         self.assertEqual(self.run_benchmark(), 0)

@@ -66,7 +66,7 @@ function initConfigListeners() {
     ["chart-data-source", "detail-data-source", "report-data-source"].forEach(id => $("#" + id).value = e.target.value);
     if (e.target.value) loadOverview(e.target.value);
   });
-  ["use-input-isolation", "use-sandbox", "use-security-checker", "authorization-precheck", 'planning-tool-view', 'delegated-tasks'].forEach(id => {
+  ["use-sandbox", "use-security-checker", "authorization-precheck", 'planning-tool-view', 'delegated-tasks'].forEach(id => {
     $("#" + id).addEventListener("change", () => {
       $("#defense-preset").value = "custom";
       updateRunPreview();
@@ -119,7 +119,6 @@ function getSelectedConfig() {
     attack_name: $("#attack-name").value,
     use_sandbox: !isOrigin && $("#use-sandbox").checked,
     use_security_checker: !isOrigin && $("#use-security-checker").checked,
-    input_isolation: !isOrigin && ($("#use-sandbox").checked || $("#use-security-checker").checked) && $("#use-input-isolation").checked,
     authorization_precheck: !isOrigin && $("#use-sandbox").checked && $("#authorization-precheck").checked,
     planning_tool_view: !isOrigin && $("#use-sandbox").checked && $('#planning-tool-view').checked,
     delegated_tasks: !isOrigin && $("#use-sandbox").checked && $('#delegated-tasks').checked,
@@ -134,12 +133,12 @@ function getSelectedConfig() {
 function applyDefensePreset(preset) {
   if (preset === "custom") return;
   $('#defense-preset').value = preset;
-  $("#use-input-isolation").checked = !["no-l1", "v2"].includes(preset);
-  $("#use-sandbox").checked = preset !== "no-l2";
-  $("#use-security-checker").checked = preset !== "no-l3";
-  $("#authorization-precheck").checked = !["no-l2", "v2"].includes(preset);
-  $('#planning-tool-view').checked = !['no-l2', 'v2'].includes(preset);
-  $('#delegated-tasks').checked = !['no-l2', 'v2'].includes(preset);
+  $("#use-sandbox").checked = preset !== "no-authorization";
+  $("#use-security-checker").checked = preset !== "no-audit";
+  const preparation = !["no-authorization", "v2"].includes(preset);
+  $("#authorization-precheck").checked = preparation;
+  $('#planning-tool-view').checked = preparation;
+  $('#delegated-tasks').checked = preparation;
   updateRunPreview();
 }
 
@@ -212,13 +211,11 @@ function updateRunPreview() {
   const isOrigin = $("#pipeline-type")?.value === "origin";
   const sandbox = !isOrigin && $("#use-sandbox").checked;
   const checker = !isOrigin && $("#use-security-checker").checked;
-  const isolation = !isOrigin && (sandbox || checker) && $("#use-input-isolation").checked;
   const precheck = sandbox && $("#authorization-precheck").checked;
   const toolView = sandbox && $('#planning-tool-view').checked;
   const delegated = sandbox && $('#delegated-tasks').checked;
   const benchmarkLabel = state.dashboardConfig?.benchmark_label || "基准未加载";
   const frameworkVersion = state.dashboardConfig?.framework_version || document.body?.dataset.frameworkVersion || '版本未记录';
-  $("#use-input-isolation").disabled = isOrigin || !(sandbox || checker);
   $("#authorization-precheck").disabled = !sandbox;
   $("#sec-model-group").style.display = checker ? "block" : "none";
   $("#sec-connection-group").style.display = checker ? "block" : "none";
@@ -233,16 +230,16 @@ function updateRunPreview() {
   if (isOrigin) {
     defenseLabel = $("#defense")?.selectedOptions[0]?.textContent || "Baseline";
   } else {
-    defenseLabel = [isolation && "L1", sandbox && "L2", checker && "L3"].filter(Boolean).join(" + ") || "关闭防御";
+    defenseLabel = [sandbox && "Authorization", precheck && "Precheck", checker && "Audit"].filter(Boolean).join(" + ") || "仅执行监控";
   }
   $("#layer-config-note").textContent = !(sandbox || checker)
-    ? "L2/L3 全关时 L1 随之关闭；该 BaseIntent 消融仍使用 Monitor，与原生 Baseline 的工具循环不同。"
+    ? "本配置仅保留 BaseIntent 的 Monitor 与票据执行。"
     : sandbox && !precheck ? "已关闭候选前置检查；工具授权仍由 Monitor 检查。宿主事件与模型语义进度分别记录。"
-    : "Monitor 与一次性票据负责执行。L2 支持授权工具视图与显式任务来源展开；宿主事件与模型语义进度分别记录。";
+    : "Monitor 与一次性票据介导执行。Intent Progress 依据宿主执行事件与语义判定推进。";
   if (!isOrigin && $('#defense-preset').value === 'v2') {
-    $('#layer-config-note').textContent = '入口消融关闭 L1、前置检查、工具视图和任务展开，保留工具授权与目录复核。';
+    $('#layer-config-note').textContent = '入口消融关闭 Precheck、授权工具视图和任务展开，保留 Authorization 与目录复核。';
   }
-  [["l1", isolation], ["l2", sandbox], ["l3", checker]].forEach(([id, enabled]) => {
+  [["authorization", sandbox], ["precheck", precheck], ["audit", checker], ["progress", sandbox]].forEach(([id, enabled]) => {
     const layer = $("#preview-layer-" + id);
     layer.classList.toggle("is-disabled", !enabled);
     layer.querySelector("b").textContent = enabled ? "启用" : "关闭";
@@ -250,14 +247,14 @@ function updateRunPreview() {
   $("#workspace-framework").textContent = isOrigin ? `${benchmarkLabel} 原生循环` : frameworkVersion;
   $("#workspace-mode").textContent = withAttack ? "对抗评测" : "良性效用评测";
   $("#framework-flow").textContent = isOrigin
-    ? `${benchmarkLabel} 原生规划与工具执行；BaseIntent 三层不参与运行。`
-    : `${sandbox ? "任务授权 → " : ""}${toolView ? "已授权工具视图 → " : ""}主模型规划${isolation ? "（返回经 L1）" : ""} → ${precheck ? "L2 整批前置 → " : ""}${checker ? "L3 动作审计 → " : ""}Monitor / 票据执行`;
+    ? `${benchmarkLabel} 原生规划与工具执行。`
+    : `${sandbox ? "Authorization → " : ""}${toolView ? "已授权工具视图 → " : ""}主模型规划 → ${precheck ? "Precheck → " : ""}${checker ? "Audit → " : ""}Monitor / 票据执行`;
   $('#delegation-flow').hidden = !delegated;
-  $('#preview-layer-l2 small').textContent = `${toolView ? '仅展示已授权工具' : '完整工具目录'}；${precheck ? '非法批次整体拒绝' : '执行前复核权限'}`;
+  $('#preview-layer-authorization small').textContent = toolView ? '规划器仅展示已授权工具' : '规划器展示完整工具目录';
   $('#workspace-audit-note').textContent = isOrigin
     ? 'BaseIntent 控件不参与原生评测。'
-    : checker ? '网页/API 默认 off，CLI 默认 shadow；各模式均免审已注册、授权且 schema 合法的 public/internal 读取，其余保留 L3。'
-    : '本配置关闭 L3；工具执行仍由 Monitor 与票据控制。';
+    : checker ? '网页/API 默认 off，CLI 默认 shadow。各模式均免审已注册、授权且 schema 合法的 public/internal 读取。'
+    : '本配置关闭 Audit，工具执行由 Monitor 与票据控制。';
 
   if ($("#preview-suites")) $("#preview-suites").textContent = `${selectedSuites.length} / ${allSuites.length}`;
   if ($("#preview-tasks")) $("#preview-tasks").textContent = allSuites.length ? estimatedTasks.toLocaleString("zh-CN") : "未加载";
@@ -640,14 +637,14 @@ async function loadOverview(runId) {
       typeof config[key] === "boolean" ? config[key] : null;
     const layerBadge = (name, value) => `<span class="effective-layer ${value === true ? 'enabled' : ''}">${name} · ${value === null ? '未记录' : value ? '启用' : '关闭'}</span>`;
     const routerMode = framework?.audit_router_mode ?? config.audit_router_mode;
-    const auditNote = layerFlag('use_security_checker') === false ? 'L3 已关闭，选择性路由不使用。' :
-      layerFlag('use_security_checker') !== true ? 'L3 开关未记录；选择性路由状态未确认。' :
+    const auditNote = layerFlag('use_security_checker') === false ? 'Audit 已关闭。' :
+      layerFlag('use_security_checker') !== true ? 'Audit 开关未记录。' :
       !String(framework?.framework_version ?? config.framework_version ?? '').startsWith('BaseIntent') ?
-        (['off', 'shadow', 'selective'].includes(routerMode) ? `路由 ${routerMode}；仍启用 L3。历史运行的免审范围未确认。` : '历史运行：L3 已启用，路由及免审范围未确认。') :
-      routerMode === 'off' ? '路由 off；仍启用 L3，固定豁免已授权的 public/internal 读取。' :
+        (['off', 'shadow', 'selective'].includes(routerMode) ? `路由 ${routerMode}，Audit 已启用。历史免审范围未确认。` : 'Audit 已启用，历史路由及免审范围未确认。') :
+      routerMode === 'off' ? '路由 off，Audit 仍启用，符合条件的 public/internal 读取固定免审。' :
       routerMode === 'shadow' ? '路由 shadow；保留固定 public/internal 读取豁免，其余动作审计。' :
       routerMode === 'selective' ? '路由 selective；固定豁免已授权的 public/internal 读取，无运行时校准要求。' :
-      'L3 已启用；选择性路由模式未记录。';
+      'Audit 已启用，选择性路由模式未记录。';
     const costUnready = suites.some(s => s.cost_comparison_ready === false);
     const costScopes = [...new Set(suites.map(s => s.cost_scope).filter(s => typeof s === 'string'))];
     const stats = suites.map(s => s.layer_stats).filter(Boolean);
@@ -655,25 +652,27 @@ async function loadOverview(runId) {
     const coverage = key => stats.reduce((total, s) => total + (s[key] || 0), 0);
     const statValue = (group, key) => coverage(group + '_records') ? formatCount(sum(group, key)) : '未记录';
     const statRows = [
-      ['L1 工具结果呈现次数', statValue('isolation', 'tool_results_rendered')],
-      ['L1 累计新增字符', statValue('isolation', 'added_characters_total')],
-      ['L2 前置允许批次', statValue('routing', 'precheck_allowed_batches')],
-      ['L2 前置拒绝批次', statValue('routing', 'precheck_rejected_batches')],
-      ['L2 累计可见工具定义', statValue('l2', 'visible_tools_total')],
-      ['L2 累计完整目录定义', statValue('l2', 'catalog_tools_total')],
-      ['L2 授权编译次数', statValue('l2', 'authorization_compilations')],
+      ...(coverage('isolation_records') ? [
+        ['历史 L1 工具结果呈现次数', statValue('isolation', 'tool_results_rendered')],
+        ['历史 L1 累计新增字符', statValue('isolation', 'added_characters_total')],
+      ] : []),
+      ['Precheck 允许批次', statValue('routing', 'precheck_allowed_batches')],
+      ['Precheck 拒绝批次', statValue('routing', 'precheck_rejected_batches')],
+      ['累计可见工具定义', statValue('l2', 'visible_tools_total')],
+      ['累计完整目录定义', statValue('l2', 'catalog_tools_total')],
+      ['Authorization 编译次数', statValue('l2', 'authorization_compilations')],
       ['已展开任务来源', statValue('l2', 'delegated_tasks_expanded')],
-      ['L3 public/internal 读取免审批次', statValue('routing', 'public_read_bypass_batches')],
-      ['L3 实际语义调用', statValue('routing', 'semantic_audit_calls')],
+      ['Audit 读取免审批次', statValue('routing', 'public_read_bypass_batches')],
+      ['Audit 实际语义调用', statValue('routing', 'semantic_audit_calls')],
     ];
     const totalTokens = s => (s.overhead?.total_tokens || 0) + (s.sec_overhead?.total_tokens || 0);
     $("#overview-content").innerHTML = `
       <div class="result-heading"><div><h3>${escapeHtml(config.label || '运行结果')}</h3><p>${escapeHtml(config.benchmark?.id || '历史 / unknown')} · ${escapeHtml(runId)} · ${escapeHtml(run.completed_at ? new Date(run.completed_at).toLocaleString('zh-CN') : '未完成')}</p></div><span class="result-version">${escapeHtml(config.origin ? (config.benchmark?.id ? `${config.benchmark.id} 原生` : '历史原生循环') : framework?.framework_version || config.framework_version || '历史版本 · 未记录')}</span></div>
       <div class="effective-config"><strong>本次实际配置</strong>${config.origin ? '<span>原生工具循环 · 无 BaseIntent 层</span>' :
-        layerBadge('L1 返回隔离', layerFlag('input_isolation')) + layerBadge('L2 工具授权', layerFlag('use_sandbox')) +
-        layerBadge('L2 前置检查', layerFlag('authorization_precheck')) +
-        layerBadge('L2 工具视图', layerFlag('planning_tool_view')) +
-        layerBadge('任务来源展开', layerFlag('delegated_tasks')) + layerBadge('L3 动作审计', layerFlag('use_security_checker'))}</div>
+        (layerFlag('input_isolation') === null ? '' : layerBadge('历史 L1 返回隔离', layerFlag('input_isolation'))) +
+        layerBadge('Authorization', layerFlag('use_sandbox')) + layerBadge('Precheck', layerFlag('authorization_precheck')) +
+        layerBadge('授权工具视图', layerFlag('planning_tool_view')) +
+        layerBadge('任务来源展开', layerFlag('delegated_tasks')) + layerBadge('Audit', layerFlag('use_security_checker'))}</div>
       ${config.origin ? '' : `<p class="audit-routing-note">${escapeHtml(auditNote)}</p>`}
       <div class="overview-cards">
         <div class="metric-card tsr"><div class="metric-label">任务成功率 TSR</div><div class="metric-value">${formatRate(agg.avg_utility_rate)}</div><small>${formatCount(agg.utility_passed)} / ${formatCount(agg.utility_valid ?? agg.total_tasks)} 个有效任务成功 · 总任务 ${formatCount(agg.total_tasks)} · 运行错误 ${formatCount(agg.execution_errors)}</small></div>
@@ -684,7 +683,7 @@ async function loadOverview(runId) {
       ${costUnready ? `<p class="cost-context">成本未标为可比较${costScopes.length ? `（${escapeHtml(costScopes.join(' / '))}）` : ''}；已记录用量不能直接作为全程成本或节省比例。</p>` : ''}
       <div class="result-section-heading"><h4>各场景结果</h4><span>TSR 按任务加权；ASR 按有效安全判定加权</span></div>
       <div class="table-responsive"><table class="table table-dark table-hover evaluation-suite-table"><thead><tr><th>场景</th><th>TSR</th><th>ASR</th><th>任务数</th><th>已记录总 Tokens</th><th>审计 Tokens</th></tr></thead><tbody>${suites.map(s => `<tr><td><strong>${escapeHtml(s.suite_name)}</strong></td><td class="text-info">${formatRate(s.metrics?.utility_rate)}</td><td class="text-danger">${formatRate(config.run_attack === false ? null : s.metrics?.attack_success_rate)}</td><td>${formatCount(s.task_counts?.total_tasks)}</td><td>${formatCount(totalTokens(s))}</td><td>${formatCount(s.sec_overhead?.total_tokens ?? (config.origin || config.use_security_checker === false ? 0 : null))}</td></tr>`).join('')}</tbody></table></div>
-      ${config.origin ? '' : `<section class="layer-observations"><div class="result-section-heading"><h4>三层运行记录</h4><span>L1 ${coverage('isolation_records')} / ${formatCount(agg.total_tasks)} · L2 ${coverage('l2_records')} / ${formatCount(agg.total_tasks)} · 路由 ${coverage('routing_records')} / ${formatCount(agg.total_tasks)} 条 trace</span></div><dl>${statRows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl><p>仅统计已计分任务，排除攻击生成预检；覆盖不全时为已记录部分。编译次数不等于模型调用，累计工具定义与字符数不等于 Tokens。</p></section>`}
+      ${config.origin ? '' : `<section class="layer-observations"><div class="result-section-heading"><h4>模块运行记录</h4><span>Authorization ${coverage('l2_records')} / ${formatCount(agg.total_tasks)} · 路由 ${coverage('routing_records')} / ${formatCount(agg.total_tasks)} 条 trace</span></div><dl>${statRows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl><p>仅统计已计分任务，排除攻击生成预检；覆盖不全时为已记录部分。编译次数不等于模型调用，累计工具定义与字符数不等于 Tokens。</p></section>`}
       <div class="result-footnote"><i class="bi bi-info-circle"></i><span>ASR 使用 AgentDojo 原生判定；工具级约束与路由统计不代表独立安全验证。基准版本、任务目录、任务 ID、模型、攻击一致后再作比较。</span></div>
     `;
     $("#workspace-run").value = runId;
@@ -1258,7 +1257,7 @@ async function loadReport() {
           ${config.defense ? `<tr><td class="text-muted">AgentDojo 防御</td><td>${escapeHtml(config.defense)}</td></tr>` : ""}
           ${!config.origin ? `
             <tr><td class="text-muted">框架版本</td><td>${escapeHtml(config.framework_version || '未记录')}</td></tr>
-            ${[['input_isolation','L1 工具返回隔离'],['use_sandbox','L2 工具授权'],['authorization_precheck','L2 前置检查'],['planning_tool_view','L2 授权工具视图'],['delegated_tasks','显式任务来源展开'],['use_security_checker','L3 动作审计']].map(([key,label]) => `<tr><td class="text-muted">${label}</td><td>${typeof config[key] === 'boolean' ? config[key] ? '启用' : '关闭' : '未记录'}</td></tr>`).join('')}
+            ${[['input_isolation','历史 L1 工具返回隔离'],['use_sandbox','Authorization'],['authorization_precheck','Precheck'],['planning_tool_view','授权工具视图'],['delegated_tasks','显式任务来源展开'],['use_security_checker','Audit']].filter(([key]) => key !== 'input_isolation' || key in config).map(([key,label]) => `<tr><td class="text-muted">${label}</td><td>${typeof config[key] === 'boolean' ? config[key] ? '启用' : '关闭' : '未记录'}</td></tr>`).join('')}
           ` : ""}
         </table>
 

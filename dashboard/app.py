@@ -314,11 +314,10 @@ def run_test_thread(run_id: str, config: dict):
                         model_id, sec_model_id,
                         use_sandbox=use_sandbox,
                         use_security_checker=use_security_checker,
-                        input_isolation=config.get("input_isolation", True),
-                        l1_projection_mode=config.get('l1_projection_mode', 'projected'),
                         prompt_profile=config.get('prompt_profile', 'legacy'),
                         audit_router_mode=config.get('audit_router_mode', 'off'),
                         audit_router_threshold=config.get('audit_router_threshold', DEFAULT_THRESHOLD),
+                        l3_strict=config.get('l3_strict', 1),
                         authorization_precheck=config.get("authorization_precheck", True),
                         planning_tool_view=config.get('planning_tool_view', True),
                         delegated_tasks=config.get('delegated_tasks', True),
@@ -1563,11 +1562,14 @@ def download_report(run_id: str):
         lines.append(f"  AgentDojo 防御: {config.get('defense')}")
     if not config.get("origin"):
         lines.append(f"  框架版本: {config.get('framework_version', '未记录')}")
-        lines.append(f"  L1 投影模式: {config.get('l1_projection_mode', '未记录')}")
+        if 'l1_projection_mode' in config:
+            lines.append(f"  历史 L1 投影模式: {config['l1_projection_mode']}")
+        if 'input_isolation' in config:
+            lines.append(f"  历史 L1 工具返回隔离: {config['input_isolation']}")
         lines.append(f"  提示候选: {config.get('prompt_profile', 'legacy')}")
-        for key, label in (("input_isolation", "L1 工具返回隔离"), ("use_sandbox", "L2 工具授权"),
-                           ("authorization_precheck", "L2 前置检查"), ('planning_tool_view', 'L2 授权工具视图'),
-                           ('delegated_tasks', '显式任务文件展开'), ("use_security_checker", "L3 动作审计")):
+        for key, label in (("use_sandbox", "Authorization"), ("authorization_precheck", "Precheck"),
+                           ('planning_tool_view', '授权工具视图'), ('delegated_tasks', '显式任务文件展开'),
+                           ("use_security_checker", "Audit")):
             lines.append(f"  {label}: {str(config[key]) if key in config else '未记录'}")
     lines.append("")
 

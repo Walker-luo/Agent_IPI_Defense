@@ -18,10 +18,11 @@ from baseintent.model_config import ModelConfigurationError, resolve_model_confi
 from baseintent.paths import RESULTS_DIR, BENCHMARK_RESULTS_DIR
 from baseintent.audit_router import (DEFAULT_THRESHOLD, POLICY_VERSION as ROUTER_POLICY_VERSION,
                                validate_router_options, summarize_events, LocalAuditRouter)
-from baseintent.input_isolation import FRAMEWORK_VERSION, framework_version_for_profile
-from baseintent.l1_projection import MODES as L1_PROJECTION_MODES, PROFILE_SHA256 as L1_PROFILE_SHA256
+from baseintent.framework import MODULE_REVISION, framework_version_for_profile
+from baseintent.failure_policy import validate_l3_strict
 from baseintent.pipelines.baseline import make_openai_compatible_pipeline
-from baseintent.pipelines.defended import make_defended_pipeline, router_configuration_hash, defended_pipeline_name
+from baseintent.pipelines.defended import (make_defended_pipeline, router_configuration_hash, defended_pipeline_name,
+                                           pipeline_protocol_binding)
 from baseintent.prompt_profiles import PROFILES as PROMPT_PROFILES, validate_profile, profile_binding
 from baseintent.intent_evidence import audit_model_settings
 from baseintent.tool_metadata import ToolMetadataError, load_tool_metadata, validate_benchmark_tool_metadata, resolve_tool_metadata
@@ -82,13 +83,13 @@ def _validate_router_controls(origin, use_security_checker, mode, use_sandbox=Tr
     if mode not in {"off","shadow","selective"}:
         raise ValueError("unknown audit-router mode")
     if mode != "off" and (origin or not use_security_checker or not use_sandbox):
-        raise ValueError("audit routing requires the defended pipeline with L2 and checker")
+        raise ValueError("audit routing requires Authorization and Audit")
 
 
 def _validate_prompt_profile(origin, use_sandbox, use_checker, profile):
     validate_profile(profile)
     if profile not in ('legacy', 'legacy-v34') and (origin or not use_sandbox or not use_checker):
-        raise ValueError('candidate prompt profiles require the defended pipeline with L2 and checker')
+        raise ValueError('candidate prompt profiles require Authorization and Audit')
 
 
 def _router_trace_summary(suite_dir, task_keys, attack_name, run_attack):
@@ -122,8 +123,9 @@ def _describe_pipeline(model_id, sec_model_id, *, origin, defense, **options):
     security, optimization = {}, {}
     if not origin:
         checker, sandbox = options['use_security_checker'], options['use_sandbox']
-        isolation = bool(sandbox or checker)
-        projection = options['l1_projection_mode'] if isolation else 'off'
+        l3_strict = options.get('l3_strict', 1)
+        protocol_binding = pipeline_protocol_binding(main, prompt_profile=prompt_profile, use_sandbox=sandbox,
+            use_security_checker=checker, l3_strict=l3_strict)
         view, delegated = options['planning_tool_view'] and sandbox, options['delegated_tasks'] and sandbox
         router, config_hash = None, None
         if checker:
@@ -131,12 +133,11 @@ def _describe_pipeline(model_id, sec_model_id, *, origin, defense, **options):
                 config_path=options.get('config_path'), **{
                     k: options.get('sec_' + k) for k in ('api_key', 'base_url', 'provider', 'api_key_env')})
             security = audit_model_settings(audit, prompt_profile)
-            config_hash = router_configuration_hash(main, audit, input_isolation=isolation,
-                authorization_precheck=sandbox, l1_projection_mode=projection,
+            config_hash = router_configuration_hash(main, audit, authorization_precheck=sandbox,
                 planning_tool_view=view, delegated_tasks=delegated,
                 audit_retries=options['audit_retries'], completion_prompt=options['completion_prompt'],
                 prompt_profile=prompt_profile, audit_router_threshold=options.get('audit_router_threshold', DEFAULT_THRESHOLD)
-                if options['audit_router_mode'] != 'off' else None, use_sandbox=sandbox)
+                if options['audit_router_mode'] != 'off' else None, use_sandbox=sandbox, l3_strict=l3_strict)
             if options['audit_router_mode'] != 'off':
                 router = LocalAuditRouter(options['audit_router_mode'], model_config_sha256=config_hash,
                                           threshold=options.get('audit_router_threshold', DEFAULT_THRESHOLD))
@@ -144,14 +145,15 @@ def _describe_pipeline(model_id, sec_model_id, *, origin, defense, **options):
                         'audit_router_threshold': router.threshold if router else None,
                         'audit_router_policy_version': ROUTER_POLICY_VERSION if router else None,
                         'audit_router_artifact_sha256': router.artifact_sha256 if router else None,
-                        **profile_binding(prompt_profile)}
+                        **profile_binding(prompt_profile), **protocol_binding}
         if prompt_profile == 'legacy':
             from baseintent.failure_policy import FAILURE_POLICY
             optimization['task_failure_policy'] = FAILURE_POLICY
         name = defended_pipeline_name(main.model_id, use_sandbox=sandbox, use_security_checker=checker,
-            input_isolation=isolation, authorization_precheck=sandbox, l1_projection_mode=projection,
+            authorization_precheck=sandbox,
             planning_tool_view=view, delegated_tasks=delegated, audit_router_mode=options['audit_router_mode'],
-            audit_router=router, router_config_hash=config_hash, prompt_profile=prompt_profile)
+            audit_router=router, router_config_hash=config_hash, prompt_profile=prompt_profile,
+            protocol_binding=protocol_binding)
     return SimpleNamespace(name=name, baseintent_model_config=main.public_dict(),
                            baseintent_security_model_config=security, baseintent_optimization_config=optimization)
 
@@ -181,6 +183,7 @@ def main(
     tool_metadata_path: str | Path | None = None,
     use_security_checker: bool = True,
     audit_retries: int = 0,
+    l3_strict: int | None = None,
     completion_prompt: bool = False,
     task_manifest_path: str | Path | None = None,
     results_dir: str | Path | None = None,
@@ -190,7 +193,6 @@ def main(
     audit_router_threshold: float = DEFAULT_THRESHOLD,
     planning_tool_view: bool = True,
     delegated_tasks: bool = True,
-    l1_projection_mode: str = 'projected',
     prompt_profile: str = 'legacy',
     task_scope: str = 'partial',
     use_sandbox: bool = True,
@@ -202,6 +204,10 @@ def main(
     _validated_cohort=None,
 ) -> int:
     backend = get_backend()
+    if l3_strict is not None:
+        validate_l3_strict(l3_strict)
+    if l3_strict == 0 and (origin or not use_security_checker or prompt_profile != 'legacy'):
+        raise ValueError('--strict 0 requires Audit and the current BaseIntent profile')
     if task_scope not in {'partial', 'full', 'screened', 'partial_screened'}:
         raise ValueError('unknown task scope')
     if reuse and (force_rerun or not run_name):
@@ -227,11 +233,20 @@ def main(
             print(f'❌ 续跑校验失败: {exc}', flush=True)
             return 1
         suites, attack = resume.suites, resume.attacks if run_attack else None
+    if isinstance(resume, ReusePlan) and not origin and use_security_checker:
+        try:
+            recorded_strict = resume.recorded_audit_strict()
+            if l3_strict is not None and l3_strict != recorded_strict:
+                raise RunConfigurationError('--strict differs from the original run; use a new --name')
+            l3_strict = recorded_strict
+        except RunConfigurationError as exc:
+            print(f'❌ 续跑校验失败: {exc}', flush=True)
+            return 1
+    if l3_strict is None:
+        l3_strict = 1
     suites = list(backend.suites if suites is None else suites)
     if not suites or any(name not in backend.suites for name in suites) or len(set(suites)) != len(suites):
         raise ValueError(f'suites must be a nonempty, unique selection of {", ".join(backend.suites)}')
-    if not isinstance(l1_projection_mode, str) or l1_projection_mode not in L1_PROJECTION_MODES:
-        raise ValueError('invalid L1 projection mode')
     _validate_prompt_profile(origin, use_sandbox, use_security_checker, prompt_profile)
     audit_router_threshold = validate_router_options(audit_router_threshold, audit_router_artifact)
     _validate_router_controls(origin,use_security_checker,audit_router_mode,use_sandbox)
@@ -277,13 +292,12 @@ def main(
                 run_name=run_name, trace_level=trace_level, tool_metadata_path=tool_metadata_path,
                 results_dir=logdir, attack_name=attack_name,
                 use_security_checker=use_security_checker,
-                audit_retries=audit_retries, completion_prompt=completion_prompt,
+                audit_retries=audit_retries, completion_prompt=completion_prompt, l3_strict=l3_strict,
                 task_manifest_path=task_manifest_path,
                 audit_router_mode=audit_router_mode,audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold,
                 planning_tool_view=planning_tool_view and not origin and use_sandbox,
                 delegated_tasks=delegated_tasks and not origin and use_sandbox,
                 prompt_profile=prompt_profile,
-                l1_projection_mode='off' if origin or not (use_sandbox or use_security_checker) else l1_projection_mode,
                 task_scope=task_scope, use_sandbox=use_sandbox, cohort_sha256=cohort_sha256,
                 run_base=resume.base if isinstance(resume, ReusePlan) else None,
 
@@ -499,7 +513,6 @@ def _configured_pipeline(options, tool_metadata):
     audit_router_threshold = options['audit_router_threshold']
     planning_tool_view = options['planning_tool_view']
     delegated_tasks = options['delegated_tasks']
-    l1_projection_mode = options['l1_projection_mode']
     prompt_profile = options['prompt_profile']
     sec_tracker = None
     if origin:
@@ -530,10 +543,10 @@ def _configured_pipeline(options, tool_metadata):
             tool_metadata=tool_metadata,
             use_security_checker=use_security_checker,
             use_sandbox=use_sandbox,
-            audit_retries=audit_retries, completion_prompt=completion_prompt,
+            audit_retries=audit_retries, completion_prompt=completion_prompt, l3_strict=options.get('l3_strict', 1),
             audit_router_mode=audit_router_mode,audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold,
             planning_tool_view=planning_tool_view, delegated_tasks=delegated_tasks,
-            l1_projection_mode=l1_projection_mode, prompt_profile=prompt_profile,
+            prompt_profile=prompt_profile,
         )
     return pipeline, main_tracker, sec_tracker
 
@@ -562,6 +575,7 @@ def _run_single_attack(
     tool_metadata_path: str | Path | None = None,
     use_security_checker: bool = True,
     audit_retries: int = 0,
+    l3_strict: int = 1,
     completion_prompt: bool = False,
     task_manifest_path: str | Path | None = None,
     results_dir: str | Path | None = None,
@@ -572,7 +586,6 @@ def _run_single_attack(
     audit_router_threshold: float = DEFAULT_THRESHOLD,
     planning_tool_view: bool = True,
     delegated_tasks: bool = True,
-    l1_projection_mode: str = 'projected',
     prompt_profile: str = 'legacy',
     task_scope: str = 'partial',
     use_sandbox: bool = True,
@@ -645,10 +658,10 @@ def _run_single_attack(
                     sec_api_key=sec_api_key, sec_base_url=sec_base_url, sec_provider=sec_provider,
                     sec_api_key_env=sec_api_key_env, config_path=config_path,
                     use_security_checker=use_security_checker, use_sandbox=use_sandbox,
-                    l1_projection_mode=l1_projection_mode, planning_tool_view=planning_tool_view,
+                    planning_tool_view=planning_tool_view,
                     delegated_tasks=delegated_tasks, audit_router_mode=audit_router_mode,
                     audit_router_artifact=audit_router_artifact, audit_router_threshold=audit_router_threshold, audit_retries=audit_retries,
-                    completion_prompt=completion_prompt, prompt_profile=prompt_profile)
+                    completion_prompt=completion_prompt, prompt_profile=prompt_profile, l3_strict=l3_strict)
             pipeline = copy(resource_cache['descriptor'])
         else:
             pipeline, main_tracker, sec_tracker = _configured_pipeline(locals(), tool_metadata)
@@ -733,9 +746,6 @@ def _run_single_attack(
             "trace_level": None if origin else trace_level,
             "tool_metadata": tool_metadata, "tool_metadata_selection": metadata_selection, "source": source_revision(),
             "defense_version": None if origin else framework_version_for_profile(prompt_profile),
-            "input_isolation": bool(not origin and (use_sandbox or use_security_checker)),
-            'l1_projection_mode': 'off' if origin else l1_projection_mode,
-            'l1_projection_profile_sha256': None if origin else L1_PROFILE_SHA256,
             "authorization_precheck": bool(not origin and use_sandbox),
             'planning_tool_view': bool(planning_tool_view and not origin),
             'delegated_tasks': bool(delegated_tasks and not origin),
@@ -749,7 +759,14 @@ def _run_single_attack(
             run_binding.update(audit_router_threshold=audit_router_threshold,
                                audit_router_policy_version=ROUTER_POLICY_VERSION)
         if not origin:
+            run_binding['framework_revision'] = MODULE_REVISION
             run_binding.update(profile_binding(prompt_profile))
+            optimization = getattr(pipeline, 'baseintent_optimization_config', {})
+            run_binding.update({key: optimization[key] for key in ('task_view_response_format', 'task_view_request_sha256',
+                                'audit_presentation', 'l3_strict') if key in optimization})
+        else:
+            # These inactive fields are part of the original native baseline binding.
+            run_binding.update(input_isolation=False, l1_projection_mode='off', l1_projection_profile_sha256=None)
         if cohort_sha256 is not None:
             run_binding['cohort_sha256'] = cohort_sha256
         recorded_binding = bind(output_dir / suite_name / "run_manifest.json", run_binding)
@@ -1003,16 +1020,16 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
         metavar="DIR",
         help="结果根目录；缺省使用 results/benchmarks/。" if full else "结果根目录；缺省使用 results/partial_benchmark/。",
     )
-    parser.add_argument("--no-checker", action="store_true", help="P0 消融：保留授权/monitor/ticket，关闭语义审计。")
-    parser.add_argument('--no-tool-view', action='store_true', help='L2 对照：规划器展示完整工具目录，保留执行权限检查。')
+    parser.add_argument("--no-checker", action="store_true", help="关闭 Audit，保留 Authorization、Precheck、Intent Progress 和执行监控。")
+    parser.add_argument('--strict', dest='l3_strict', type=int, choices=(0, 1),
+                        help='Audit 执行策略。1 拦截 abstain（默认），0 仅放行通过 Monitor 校验的有效 abstain。续跑沿用原策略。')
+    parser.add_argument('--no-tool-view', action='store_true', help='规划器展示完整工具目录，保留 Precheck 和执行权限检查。')
     parser.add_argument('--no-delegated-tasks', action='store_true', help='关闭显式任务文件展开，用于原任务编译对照。')
     parser.add_argument('--prompt-profile', choices=PROMPT_PROFILES, default='legacy',
                         help='legacy=BaseIntent 意图流程（默认）；legacy-v34=历史v3.4对照；其余为显式旧候选')
-    parser.add_argument('--l1-projection-mode', choices=('off','shadow','projected'), default='off',
-                        help='L1有限交易投影，默认projected；off保留旧来源封装，shadow只观察。')
     # None selects the profile default below: BaseIntent shadow, baseline/NoChecker off.
     parser.add_argument("--audit-router-mode", choices=("off", "shadow", "selective"), default=None,
-                        help="L3纯算法路由；BASEINTENT CLI默认shadow，baseline/NoChecker默认off；可显式选择。")
+                        help="Audit 路由模式。BaseIntent CLI 默认 shadow，baseline 和 NoChecker 默认 off。")
     parser.add_argument("--audit-router-artifact", help="已停用；请改用 --audit-router-threshold。")
     parser.add_argument("--audit-router-threshold", type=float, default=DEFAULT_THRESHOLD,
                         help="诊断阈值 [0,1]，默认0.70；read-purpose-v2按读取规则免审，不按分数阈值。")
@@ -1051,6 +1068,8 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
         validate_controls(origin=args.baseline, use_security_checker=not args.no_checker,
                           audit_retries=args.audit_retries, completion_prompt=args.completion_prompt)
         _validate_prompt_profile(args.baseline, True, not args.no_checker, args.prompt_profile)
+        if args.l3_strict == 0 and (args.baseline or args.no_checker or args.prompt_profile != 'legacy'):
+            parser.error('--strict 0 requires Audit and the current BaseIntent profile')
         _validate_router_controls(args.baseline,not args.no_checker,args.audit_router_mode)
         if args.write_task_manifest:
             path = Path(args.write_task_manifest)
@@ -1092,13 +1111,12 @@ def cli(argv: list[str] | None = None, *, task_scope: str = 'partial', entrypoin
             config_path=args.config_path,
             results_dir=args.results_dir if args.results_dir is not None else BENCHMARK_RESULTS_DIR if full else None,
             attack=selected_attacks,
-            use_security_checker=not args.no_checker, audit_retries=args.audit_retries,
+            use_security_checker=not args.no_checker, audit_retries=args.audit_retries, l3_strict=args.l3_strict,
             completion_prompt=args.completion_prompt, task_manifest_path=args.task_manifest_path,
             audit_router_mode=args.audit_router_mode,audit_router_artifact=args.audit_router_artifact, audit_router_threshold=args.audit_router_threshold,
             planning_tool_view=not args.no_tool_view and not args.baseline,
             delegated_tasks=not args.no_delegated_tasks and not args.baseline,
             prompt_profile=args.prompt_profile,
-            l1_projection_mode='off' if args.baseline else args.l1_projection_mode,
             **dispatch_options,
         )
     except ModelConfigurationError as exc:

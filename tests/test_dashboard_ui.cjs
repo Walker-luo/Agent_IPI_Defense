@@ -12,7 +12,7 @@ function dashboard(fetch = async () => ({ok: true, json: async () => []})) {
       setAttribute() {}, addEventListener() {}});
     return nodes.get(selector);
   };
-  for (const id of ['#use-input-isolation', '#use-sandbox', '#use-security-checker', '#authorization-precheck', '#planning-tool-view', '#delegated-tasks']) node(id).checked = true;
+  for (const id of ['#use-sandbox', '#use-security-checker', '#authorization-precheck', '#planning-tool-view', '#delegated-tasks']) node(id).checked = true;
   node('#pipeline-type').value = 'baseintent';
   node('#run-attack').value = 'true';
   node('#trace-level').value = 'summary';
@@ -27,35 +27,33 @@ function dashboard(fetch = async () => ({ok: true, json: async () => []})) {
   return {context, node, run: code => vm.runInContext(code, context)};
 }
 
-test('submitted config carries an independently disabled L1 and selected trace level', () => {
+test('submitted config carries Precheck and the selected trace level without retired settings', () => {
   const ui = dashboard();
-  ui.node('#use-input-isolation').checked = false;
   ui.node('#trace-level').value = 'standard';
   for (const type of ['baseintent', 'newframe']) {
     ui.node('#pipeline-type').value = type;
     const config = ui.run('getSelectedConfig()');
     assert.equal(config.origin, false);
-    assert.equal(config.input_isolation, false);
+    assert.equal(Object.hasOwn(config, "input_isolation"), false);
     assert.equal(config.authorization_precheck, true);
     assert.equal(config.trace_level, 'standard');
   }
 });
 
-test('removing L2 disables its precheck while retaining L1 and L3', () => {
+test('disabling Authorization disables Precheck while retaining Audit', () => {
   const ui = dashboard();
-  ui.run("applyDefensePreset('no-l2')");
+  ui.run("applyDefensePreset('no-authorization')");
   const config = ui.run('getSelectedConfig()');
   assert.equal(config.use_sandbox, false);
   assert.equal(config.authorization_precheck, false);
-  assert.equal(config.input_isolation, true);
   assert.equal(config.use_security_checker, true);
 });
 
-test('entry ablation control removes L1 and candidate precheck but keeps authorization and auditing', () => {
+test('entry ablation disables Precheck while keeping Authorization and Audit', () => {
   const ui = dashboard();
   ui.run("applyDefensePreset('v2')");
   const config = ui.run('getSelectedConfig()');
-  assert.equal(config.input_isolation, false);
+  assert.equal(Object.hasOwn(config, "input_isolation"), false);
   assert.equal(config.authorization_precheck, false);
   assert.equal(config.use_sandbox, true);
   assert.equal(config.use_security_checker, true);
@@ -63,24 +61,24 @@ test('entry ablation control removes L1 and candidate precheck but keeps authori
   assert.equal(config.delegated_tasks, false);
 });
 
-test('full preset uses authorized views and explicit delegation, while no L2 disables both', () => {
+test('full preset uses authorized views and explicit delegation, while disabling Authorization disables both', () => {
   const ui = dashboard();
   ui.run("applyDefensePreset('full')");
   assert.equal(ui.run('getSelectedConfig()').planning_tool_view, true);
   assert.equal(ui.run('getSelectedConfig()').delegated_tasks, true);
-  ui.run("applyDefensePreset('no-l2')");
+  ui.run("applyDefensePreset('no-authorization')");
   assert.equal(ui.run('getSelectedConfig()').planning_tool_view, false);
   assert.equal(ui.run('getSelectedConfig()').delegated_tasks, false);
 });
 
-test('report shows saved effective L2 controls independently from the current draft', async () => {
+test('report shows saved effective Authorization controls independently from the current draft', async () => {
   const ui = dashboard(async () => ({ok: true, json: async () => ({suites: ['workspace'],
     config: {origin: false, use_sandbox: true, use_security_checker: true,
     planning_tool_view: false, delegated_tasks: false}, suites: []})}));
   ui.node('#report-data-source').value = 'fixture';
   await ui.run('loadReport()');
   assert.equal(ui.run('getSelectedConfig()').planning_tool_view, true);
-  assert.match(ui.node('#report-content').innerHTML, /L2 授权工具视图<\/td><td>关闭/);
+  assert.match(ui.node('#report-content').innerHTML, /授权工具视图<\/td><td>关闭/);
   assert.match(ui.node('#report-content').innerHTML, /显式任务来源展开<\/td><td>关闭/);
 });
 
@@ -129,7 +127,7 @@ test('draft flow follows the effective tool view and delegation switches', () =>
   assert.match(ui.node('#layer-config-note').textContent, /入口消融/);
 });
 
-test('saved run keeps its own version and distinguishes router off from disabled L3', async () => {
+test('saved run keeps its own version and distinguishes router off from disabled Audit', async () => {
   const ui = dashboard(async () => ({ok: true, json: async () => ({config: {
     framework_version: 'three-layer-v1', use_security_checker: true, audit_router_mode: 'off'},
     suites: [{suite_name: 'workspace', layer_stats: {l2_records: 1}, cost_comparison_ready: false}],
@@ -137,10 +135,10 @@ test('saved run keeps its own version and distinguishes router off from disabled
   ui.run("state.dashboardConfig = {framework_version: 'future-engine-version', benchmark_label: 'AgentDojo'}; updateRunPreview()");
   await ui.run("loadOverview('historical-run')");
   assert.match(ui.node('#overview-content').innerHTML, /result-version">three-layer-v1/);
-  assert.match(ui.node('#overview-content').innerHTML, /off[^<]*仍启用 L3/);
-  assert.match(ui.node('#overview-content').innerHTML, /历史运行的免审范围未确认/);
+  assert.match(ui.node('#overview-content').innerHTML, /off[^<]*Audit 已启用/);
+  assert.match(ui.node('#overview-content').innerHTML, /历史免审范围未确认/);
   assert.doesNotMatch(ui.node('#overview-content').innerHTML, /固定豁免/);
-  assert.match(ui.node('#overview-content').innerHTML, /L2 1 \/ 2/);
+  assert.match(ui.node('#overview-content').innerHTML, /Authorization 1 \/ 2/);
   assert.match(ui.node('#overview-content').innerHTML, /成本未标为可比较/);
   assert.equal(ui.node('#workspace-framework').textContent, 'future-engine-version');
 });

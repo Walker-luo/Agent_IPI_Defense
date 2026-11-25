@@ -111,7 +111,7 @@ class PlanningViewTests(unittest.TestCase):
         self.assertEqual(llm.client.chat.completions.create.call_count, 1)
 
     def test_missing_metadata_is_not_visible_even_if_host_allowlist_contains_tool(self):
-        from baseintent.l2_authorization import planning_runtime_view
+        from baseintent.authorization import planning_runtime_view
         runtime, _ = make_runtime()
         runtime._baseintent_tool_metadata.pop('write_data')
         view, stats = planning_runtime_view(runtime, {'read_data', 'write_data'})
@@ -152,7 +152,7 @@ class PlanningViewTests(unittest.TestCase):
         self.assertIn('AUTH_CATALOG_CHANGED', state[3][-1]['error'])
 
     def test_planning_definition_edits_do_not_mutate_host_catalogue(self):
-        from baseintent.l2_authorization import planning_runtime_view
+        from baseintent.authorization import planning_runtime_view
         runtime, _ = make_runtime()
         description = runtime.functions['read_data'].description
         view, _ = planning_runtime_view(runtime, {'read_data'})
@@ -160,7 +160,7 @@ class PlanningViewTests(unittest.TestCase):
         self.assertEqual(runtime.functions['read_data'].description, description)
 
     def test_planning_schema_configuration_and_fields_are_isolated(self):
-        from baseintent.l2_authorization import planning_runtime_view
+        from baseintent.authorization import planning_runtime_view
         runtime, _ = make_runtime()
         view, _ = planning_runtime_view(runtime, {'read_data'})
         original = runtime.functions['read_data'].parameters
@@ -215,7 +215,7 @@ class BoundedProfileTests(unittest.TestCase):
     request = 'Update the record, do not send.'
 
     def profile(self, **changes):
-        from baseintent.l2_authorization import ToolAuthorizationProfile
+        from baseintent.authorization import ToolAuthorizationProfile
         options = dict(name='fixture-update', request_patterns=(r'Update the record, do not send\.',),
                        allowed_seed_tools=frozenset({'write_data', 'read_data'}),
                        prerequisites=(('write_data', ('read_data',)),))

@@ -57,7 +57,7 @@ class StepAuthorizationTests(unittest.TestCase):
   from unittest.mock import patch
   from baseintent.model_config import ModelConfig
   cfg=ModelConfig('offline','offline','https://offline.invalid','custom')
-  options=dict(input_isolation=True,authorization_precheck=True,l1_projection_mode='projected',planning_tool_view=True,delegated_tasks=True)
+  options=dict(authorization_precheck=True,planning_tool_view=True,delegated_tasks=True)
   def identity(profile):return d.router_configuration_hash(cfg,cfg,prompt_profile=profile,**options)
   default=identity('legacy');candidate=identity('protocol-v1')
   with patch.object(d.ToolAuthorizationCompiler,'CLASSIC_POLICY','changed candidate base'):

@@ -17,9 +17,9 @@
 | `--task-manifest PATH` | 使用冻结的 partial 任务 ID 清单。 |
 | `--write-task-manifest PATH` | 离线导出当前 partial 清单并退出；目标文件必须不存在。 |
 | `--reuse` / `--force-rerun` | 同名同配置续跑／强制重新执行，二者互斥。 |
-| `--l1-projection-mode off|shadow|projected` | 当前 CLI 默认 `off`；观察候选用 `shadow`，启用有界银行投影用 `projected`。 |
 | `--trace-level summary|standard|full` | 默认 `summary`（可由环境变量覆盖）；需要更多诊断时用 standard/full。 |
-| `--no-checker` | 关闭语义动作审计，保留 L2／进度和执行监控。 |
+| `--no-checker` | 关闭 Audit，保留 Authorization、Precheck、Intent Progress 和执行监控。 |
+| `--strict {0,1}` | 默认 `1`，拦截 abstain。当前 profile 的 `0` 放行通过 Monitor 检查的有效 abstain。续跑省略时沿用原值。 |
 
 `--fliter` 和 `--goal` 不适用于 clean、DoS 和清单导出。审计路由、profile、工具目录等其余共享选项见[公共防御参数](benchmark.md#可选控制与日志)。完整列表可运行 `python -m experiments.run_partial_benchmark --help`。
 

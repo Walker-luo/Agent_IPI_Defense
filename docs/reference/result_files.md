@@ -26,7 +26,7 @@
 
 原生 JSON 保留交互、评分、错误、耗时及诊断引用；v2 诊断保存紧凑授权、意图、层路由、成本、最终审计和动作事件。不可变公开配置按攻击/场景去重，当前公开字段使用 `baseintent_*`。
 
-L3/progress 的完整 content 或 refusal 在解析前保存到响应附件，包括畸形/不完整回复；立即绑定相对路径、attempt/response ID 和字节偏移。只保存允许的 finish/usage/latency/call/intent 字段，L2 只存解析授权。不保存隐藏推理、HTTP 头、SDK 对象、凭证或重复完整提示/工具正文。
+Audit 和 Intent Progress 的完整 content 或 refusal 在解析前保存到响应附件，包括畸形/不完整回复；立即绑定相对路径、attempt/response ID 和字节偏移。只保存允许的 finish/usage/latency/call/intent 字段，Authorization 只存解析授权。不保存隐藏推理、HTTP 头、SDK 对象、凭证或重复完整提示/工具正文。
 
 宿主派生的 intent_id/status/completion_kind/next_intent_id/reason_code/host_facts 不是模型原始控制字段。`progress_source=host` 没有新 response_id，不能拿上一条模型回复当作本次原文；跳步列表保持为空。模型语义结果与 host 的事实/效果/回答标志分别记录。
 
@@ -38,9 +38,11 @@ cache 命中不生成模型回复、不重写旧文件；真实重跑追加新 a
 
 有效 TSR = utility=true / 有效 utility 布尔数；有效 ASR = security=true / 有效原生 security 布尔数。clean ASR 不适用。计划、尝试、完成、有效、错误、未完成和不支持分别报告，不把错误当成功防御。
 
-已收到的已知 L2/progress 输出缺陷及有界无进展使用原生 `AbortAgentError` 停止，保留已执行效果和已有最终回答，再由原生谓词评分。未完成且攻击未成功可以是 False/False；框架终止也可能 utility=true。L3 deny/协议缺陷保留既有受限重规划。
+已收到的已知 Authorization 或 Intent Progress 的 输出缺陷及有界无进展使用原生 `AbortAgentError` 停止，保留已执行效果和已有最终回答，再由原生谓词评分。未完成且攻击未成功可以是 False/False；框架终止也可能 utility=true。Audit deny/协议缺陷保留既有受限重规划。
 
-API/超时、输入/目录/内部/I/O 错误及主模型畸形工具参数 JSON 属基础设施错误，效用/安全标签为空。参数不修补，畸形批次不执行。当前阻断层分别为 L2、L3、Monitor。安全错误诊断只记录允许的类型/代码/字段子码和有限栈位置，不保存请求、响应、局部变量或凭证。
+API/超时、输入/目录/内部/I/O 错误及主模型畸形工具参数 JSON 属基础设施错误，效用/安全标签为空。参数不修补，畸形批次不执行。当前阻断来源包括 Precheck、Audit 和 Reference Monitor。历史错误码按原样读取。安全错误诊断只记录允许的类型/代码/字段子码和有限栈位置，不保存请求、响应、局部变量或凭证。
+
+当前防御的 `run_manifest.json` 记录适用的协议配置。`task_view_response_format` 是 OpenAI 意图提取的实际传输格式，`task_view_request_sha256` 绑定提示、格式和输出 schema。`audit_presentation` 记录输入版本，`l3_strict` 记录执行策略。关闭 Audit 时省略后两项。显式放行的 `abstain` 保留原判决及 `AUDIT_ABSTAIN_ALLOW` 执行原因。
 
 ## 成本与比较
 

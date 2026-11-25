@@ -4,7 +4,7 @@
 
 | 指南 | 内容 |
 | --- | --- |
-| [框架](framework.md) | L1/L2/L3、宿主进度、Monitor、公式与边界 |
+| [框架](framework.md) | Authorization、Precheck、Audit、Intent Progress 与 Monitor |
 | [模型与工具配置](model_tool_configuration.md) | 两个环境、凭证、配置优先级、工具元数据与默认值 |
 | [评测入口](evaluation.md) | 离线检查、在线评测及证据口径 |
 | [完整评测与公共参数](../benchmark.md) | Full、baseline、clean、攻击、cohort、续跑 |

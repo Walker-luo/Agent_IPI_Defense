@@ -1,9 +1,10 @@
 """Intent-flow production contracts with offline native tools, never SDK/network."""
 import importlib.util
 import json
+import os
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from agentdojo.functions_runtime import FunctionsRuntime, FunctionCall, EmptyEnv
 from baseintent.pipelines import defended as d
@@ -52,6 +53,41 @@ def tools():
 
 
 class IntentAuthorizationTests(unittest.TestCase):
+    def test_openai_fixed_condition_schema_and_json_object_control(self):
+        from baseintent.intent_flow import compile_authorization, task_view_binding
+        for endpoint in ('https://api.openai.com/v1', 'https://compatible.invalid/v1'):
+            for response_type in ('json_schema', 'json_object'):
+                with self.subTest(endpoint=endpoint, response_type=response_type), patch.dict(
+                        os.environ, {'BASEINTENT_OPENAI_TASK_VIEW_FORMAT': response_type}, clear=True):
+                    config = {'provider': 'openai', 'model_id': 'example-model', 'base_url': endpoint}
+                    client = Mock()
+                    client.chat.completions.create.side_effect = [reply({'authorization_steps': [
+                        {'intent': 'Check the balance', 'goal_kind': 'facts', 'condition': None},
+                        {'intent': 'Send the update', 'goal_kind': 'conditional_effect', 'condition': 'the balance is positive'},
+                    ]}), reply({'tools': ['send_message'], 'step_tool_expectations': expectations(1)})]
+                    llm = SimpleNamespace(name='example-model', client=client, baseintent_model_config=config)
+                    request = 'Check the balance. Send the update only if the balance is positive.'
+                    intents, kinds, _, _ = compile_authorization(llm, request, {'send_message': {}}, {'send_message'})
+                    self.assertEqual(kinds, ('conditional_effect',))
+                    self.assertIn('the balance is positive', intents[0])
+                    first, second = client.chat.completions.create.call_args_list
+                    self.assertEqual(first.kwargs['response_format']['type'], response_type)
+                    if response_type == 'json_schema':
+                        formatter = first.kwargs['response_format']['json_schema']
+                        self.assertIs(formatter['strict'], True)
+                        self.assertEqual(formatter['schema']['properties']['authorization_steps']['items']['required'],
+                                         ['intent', 'goal_kind', 'condition'])
+                    self.assertEqual(second.kwargs['response_format'], {'type': 'json_object'})
+                    self.assertEqual(task_view_binding(config)['task_view_response_format'], response_type)
+
+    def test_fixed_condition_validation_rejects_wrong_type_and_wrong_goal(self):
+        from baseintent.intent_flow import IntentFlowError, parse_intents
+        for kind, condition in [('effect', 'extra requirement'), ('condition', None),
+                                ('conditional_effect', ' '), ('conditional_effect', True)]:
+            with self.subTest(kind=kind, condition=condition), self.assertRaises(IntentFlowError):
+                parse_intents({'authorization_steps': [{'intent': 'step', 'goal_kind': kind,
+                                                         'condition': condition}]}, fixed_condition=True)
+
     def test_default_compiles_intents_then_global_tools_with_progress_only_mapping(self):
         runtime, _ = tools(); client = Mock()
         client.chat.completions.create.side_effect = [
@@ -110,7 +146,7 @@ class IntentAuthorizationTests(unittest.TestCase):
         self.assertEqual(len(grant.authorization_intents), 1)
 
     def test_unmatched_host_profile_preserves_compliant_single_tools_fallback(self):
-        from baseintent.l2_authorization import ToolAuthorizationProfile
+        from baseintent.authorization import ToolAuthorizationProfile
         runtime, _ = tools(); client = Mock()
         def compliant_reply(**kwargs):
             policy = kwargs['messages'][0]['content']
@@ -134,8 +170,8 @@ class IntentAuthorizationTests(unittest.TestCase):
         from unittest.mock import patch
         config = ModelConfig('offline','offline','https://offline.invalid','custom')
         def binding():
-            return d.router_configuration_hash(config, config, input_isolation=True,
-                authorization_precheck=True, l1_projection_mode='projected', planning_tool_view=True,
+            return d.router_configuration_hash(config, config,
+                authorization_precheck=True, planning_tool_view=True,
                 delegated_tasks=True, profile_hash='host-profile', prompt_profile='legacy')
         before = binding()
         with patch.object(d.ToolAuthorizationCompiler,'CLASSIC_POLICY','Changed fallback tools policy'):
@@ -163,7 +199,7 @@ class IntentStateTests(unittest.TestCase):
 
 
 class IntentReadBoundaryTests(unittest.TestCase):
-    def run_calls(self, calls, verdict='deny', mode='off', mutate=None, active_flow=None):
+    def run_calls(self, calls, verdict='deny', mode='off', mutate=None, active_flow=None, l3_strict=1):
         runtime, effects = tools(); sandbox = d.PermissionSandbox(list(runtime.functions))
         verifier = d.RouterReceiptVerifier()
         router = d.LocalAuditRouter(mode) if mode != 'off' else None
@@ -171,18 +207,37 @@ class IntentReadBoundaryTests(unittest.TestCase):
         class Checker(d.ActionSecurityChecker):
             def _request_audit(self, query, env, packet):
                 packets.append(packet)
-                return json.dumps(dict(decision=verdict, violations=[] if verdict == 'allow' else ['OFF_TASK_ACTION'],
-                    confidence=.9, reason_code='ALIGNED' if verdict == 'allow' else 'OFF_TASK_ACTION'))
+                code = {'allow': 'ALIGNED', 'abstain': 'MISSING_EVIDENCE', 'deny': 'OFF_TASK_ACTION'}.get(verdict, 'ALIGNED')
+                return json.dumps(dict(decision=verdict, violations=[] if verdict == 'allow' else [code],
+                                       confidence=.9, reason_code=code))
         checker = Checker(SimpleNamespace(name='offline'), sandbox=sandbox,
             router_verifier=verifier, audit_router=router, intent_flow_getter=lambda: active_flow)
         monitor = d.ReferenceMonitor(sandbox, True, router_verifier=verifier,
-            audit_router=router, intent_read_policy=True, intent_flow_getter=lambda: active_flow)
+            audit_router=router, intent_read_policy=True, intent_flow_getter=lambda: active_flow,
+            l3_strict=l3_strict)
         state = ('Read the blog and send its summary', runtime, EmptyEnv(),
             [dict(role='assistant', content=[], tool_calls=calls)], {})
         state = checker.query(*state)
         if mutate: mutate(state[-1])
         for element in (monitor, d.TicketedToolsExecutor(monitor)): state = element.query(*state)
         return effects, packets, state
+
+    def test_strict_modes_only_differ_for_valid_authenticated_abstain(self):
+        call = FunctionCall(function='send_message', args={'body': 'summary'}, id='send')
+        for mode in (0, 1):
+            effects, _, state = self.run_calls([call], verdict='abstain', l3_strict=mode)
+            self.assertEqual(effects, [('send', 'summary')] if mode == 0 else [])
+            audit = state[-1]['baseintent_audit_decision']
+            self.assertEqual(audit['decision'], 'abstain')
+            self.assertEqual(audit['final_reason_code'], 'AUDIT_ABSTAIN_ALLOW' if mode == 0 else 'AUDIT_ABSTAIN')
+            action = state[-1]['baseintent_action_ledger'][0]
+            self.assertFalse(action.get('audit_verified', False))
+            for verdict in ('deny', 'invalid'):
+                effects, _, _ = self.run_calls([call], verdict=verdict, l3_strict=mode)
+                self.assertEqual(effects, [])
+        effects, _, _ = self.run_calls([call], verdict='abstain', l3_strict=0,
+                                      mutate=lambda extra: extra.pop('_baseintent_intent_receipt'))
+        self.assertEqual(effects, [])
 
     def test_public_blog_and_query_url_bypass_in_every_router_mode(self):
         for mode in ('off', 'shadow', 'selective'):

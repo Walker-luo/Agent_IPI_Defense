@@ -1,6 +1,6 @@
 # BaseIntent
 
-BaseIntent 是工具使用型 LLM Agent 的间接提示词注入防御研究原型。它把可信任务拆成意图，冻结全局工具权限，再结合真实执行事件与有限语义判断推进；L3 审计具体动作，Monitor 约束实际执行。
+BaseIntent 是工具使用型 LLM Agent 的间接提示词注入防御研究原型。它从可信任务编译意图与工具权限，校验候选批次，审计具体动作，并结合执行证据推进意图。
 
 当前默认 `prompt_profile=legacy`，框架标识为 `BaseIntent`。运行名称只命名实验，不选择策略。Python 包为 `baseintent`；旧结果保留原身份，兼容范围见[迁移说明](docs/reference/migration.md)。
 
@@ -40,12 +40,12 @@ Dashboard 默认地址为 [http://127.0.0.1:8888/](http://127.0.0.1:8888/)。完
 
 ## 当前框架
 
-- **L1** 从原始历史重建来源隔离视图；明确的银行月支出任务可使用有界六字段投影。原始返回保留用于审计和原生轨迹，无额外模型调用。
-- **L2** 两次主模型调用依次生成目标类型与意图、选择全局工具及固定 ID 键的进度关联。宿主先无损归并连续准备前缀，再分配 ID。工具关联用于进度，不是每意图权限。
-- **进度** 宿主记录真实成功执行和最终回答；准备读取可本地观察，复杂目标保留语义判断。自动完成仅覆盖严格有界的单次直接邀请模式。
-- **L3 / Monitor** 用有限四字段判决检查当前意图与完整用户约束，再通过整批回执和一次性票据执行。注册、已授权、schema 有效的 public/internal 读取在所有路由模式固定免审；这不按 sink、URL 或对象隐私筛选。
+- **Authorization** 两次主模型调用分别分解意图和冻结全局工具权限。宿主归并准备项、分配意图 ID，并保存工具与进度的关联。
+- **Precheck** 校验整批候选的工具、权限、原生参数 schema 和元数据。任一项无效即拒绝整批。
+- **Audit** 用四字段判决检查当前动作及完整任务约束。符合条件的 public/internal 读取固定免审。Reference Monitor 使用整批回执和一次性票据介导执行。
+- **Intent Progress** 以实际执行与回复为证据推进目标。原生工具消息直接反馈给规划器，复杂目标保留语义判断。
 
-CLI 路由默认 `shadow`，API/factory 默认 `off`；`off` 仍保留 L3，阈值不能调节固定读取免审范围。对象、参数、数据权限及最终文本独立动作审计尚未实现。机制、公式与例子见[框架说明](docs/reference/framework.md)。
+CLI 路由默认 `shadow`，API/factory 默认 `off`。`off` 下 Audit 仍运行，固定读取免审范围在各模式一致。机制与边界见[框架说明](docs/reference/framework.md)。
 
 最近固定键 12 例观察：TSR **8/12 → 7/12**，原生 ASR **0/8 → 0/8**，progress 调用 **61 → 43**，计分 Token **551,741 → 470,265（−14.8%）**。这是有限范围的历史观察，效用验收仍为 partial，不能宣称一般防御有效或整体安全通过。项目整理本身不产生新的效用结论。
 
@@ -53,4 +53,4 @@ CLI 路由默认 `shadow`，API/factory 默认 `off`；`off` 仍保留 L3，阈�
 
 [文档索引](docs/reference/README.md) · [框架](docs/reference/framework.md) · [配置](docs/reference/model_tool_configuration.md) · [测试](docs/reference/evaluation.md) · [结果](docs/reference/result_files.md) · [Dashboard](docs/reference/dashboard.md) · [迁移](docs/reference/migration.md)
 
-核心入口：`baseintent/pipelines/defended.py`（共享执行）、`baseintent/intent_flow.py`（授权与进度）、`baseintent/input_isolation.py`（L1）、`baseintent/decision_schema.py`（L3 契约）。实验入口见 [experiments/README.md](experiments/README.md)。新检查和临时运行产物放在 `artifacts/<日期>_<任务>/`，保留现有用户结果与历史证据。
+核心代码位于 `baseintent/pipelines/defended.py`、`baseintent/authorization.py`、`baseintent/intent_flow.py` 和 `baseintent/decision_schema.py`。新检查和临时运行产物放在 `artifacts/<日期>_<任务>/`。详见[实验入口](experiments/README.md)。

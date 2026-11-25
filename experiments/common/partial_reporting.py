@@ -315,7 +315,7 @@ def write_run_overview(base_dir: Path, attack_names: list[str], suites: list[str
             lines.append("| " + " | ".join(_cell(value) for value in row) + " | " + _link(location) + " | " + case["excerpt_status"] + " |")
         if len(cases) > 10:
             lines.extend(['', f'仅展示前10个入口，共{len(cases)}个案例；其余请查看failure_cases.jsonl。'])
-    lines.extend(['', '## L3路由', '',
+    lines.extend(['', '## Audit 路由', '',
                   '[查看运行级路由汇总](l3_router_summary.md) · [结构化统计](l3_router_summary.json)',
                   '路由汇总区分未校准、无候选与缺失记录；shadow不实际免审，selective实际节省Token仍未知。'])
     if routing_summary is not None:
